@@ -1,0 +1,75 @@
+backend/engine/progress.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-235
+backend/engine/visualizer.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-176
+backend/engine/item_writer.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-152
+README.md
+  s_317405eb6d04bc::t_c0be22b3f88dab 1-10,12-23,25-54,56-65,69-91,94-119,121,123-124,126-205,207-219,221-270,272-308,313,335
+  s_317405eb6d04bc::t_8bb9a66cee2e0c 55,66-68,92-93
+  s_317405eb6d04bc::t_0bd2b6d3049561 11
+  s_317405eb6d04bc::t_2ff8128ca53ee7 24
+  s_317405eb6d04bc::t_3f5f609fdf0bb8 120,122,125,206,220,271,309-312,314-334,336-339
+backend/engine/grader.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-120
+start.sh
+  s_317405eb6d04bc::t_701c31f51d72d5 1-81
+backend/engine/agent.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-377
+backend/engine/assessment.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-196
+.gitignore
+  s_317405eb6d04bc::t_a7e1871d71a343 1-6
+backend/storage/memory.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-303
+backend/engine/concept_map.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 1-120
+backend/main.py
+  s_317405eb6d04bc::t_2d66e5d3cfbece 2,5-20,24-33,36-62,64-138
+  s_317405eb6d04bc::t_0651659ab9005b 1,3-4,21-23,34-35,63
+backend/tests/test_offline.py
+  s_317405eb6d04bc::t_a82ad4450efab9 1-539
+docs/DESIGN.md
+  s_317405eb6d04bc::t_3f5f609fdf0bb8 1-474,477-530
+  s_317405eb6d04bc::t_a7e1871d71a343 475-476
+backend/engine/proficiency.py
+  s_317405eb6d04bc::t_6631ff96a398af 1-155
+backend/engine/selector.py
+  s_317405eb6d04bc::t_13d1f05e608f27 1-182
+backend/engine/topics.py
+  s_317405eb6d04bc::t_265febec80416c 1-90
+backend/llm/anthropic_provider.py
+  s_317405eb6d04bc::t_0b8dd34d8ff460 1-110
+backend/requirements.txt
+  s_317405eb6d04bc::t_714a576e979627 1-4
+docs/SPECIFICATION.md
+  s_317405eb6d04bc::t_5f29b86df88932 1-253
+frontend/app.js
+  s_317405eb6d04bc::t_e5f11e1501b57b 1-927
+frontend/index.html
+  s_317405eb6d04bc::t_2fa7a8488ff8d6 1-313
+frontend/styles.css
+  s_317405eb6d04bc::t_8b79cc1ecdd351 1-291
+backend/llm/__init__.py
+  s_317405eb6d04bc::t_fd82603ee87220 1-52
+backend/llm/base.py
+  s_317405eb6d04bc::t_f411cdaabb0ec4 1-103
+backend/llm/openai_compatible.py
+  s_317405eb6d04bc::t_6e94ca92954e7d 1-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b381cd43d17e240126948cdaff43d90ef9b6683e",
+  "prompts": {},
+  "sessions": {
+    "s_317405eb6d04bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fd3b2cc7-92e5-4560-8cf5-cbdea33377c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Samarth Keshari <samarth.keshari@gmail.com>"
+    }
+  }
+}
