@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adaptive Math Assessment</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand" id="home-link">∑ Adaptive Math Assessment</h1>
+    <nav class="nav">
+      <button class="linkbtn hidden" id="nav-dashboard"></button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Home: pick or add a student -->
+    <section id="screen-home" class="screen">
+      <div class="grid-2">
+        <form id="student-form" class="card">
+          <h2>Who's practicing?</h2>
+          <label>Student name
+            <input id="student-name" required maxlength="80" placeholder="e.g. Maya" autocomplete="off" />
+          </label>
+          <button type="submit" class="btn primary">Open student</button>
+          <p class="muted small">Each student's sessions, results and progress are saved on this
+            computer in their own folder (<code>data/students/&lt;name&gt;/</code>).</p>
+        </form>
+        <div class="card">
+          <h2>Students</h2>
+          <p class="muted small" id="students-hint"></p>
+          <ul id="students" class="history"></ul>
+        </div>
+      </div>
+      <p class="muted small center" id="llm-info"></p>
+    </section>
+
+    <!-- Student dashboard -->
+    <section id="screen-student" class="screen hidden">
+      <div class="row-between page-head">
+        <div>
+          <h2 id="dash-name" class="mt0"></h2>
+          <p class="muted small" id="dash-sub"></p>
+        </div>
+        <button class="btn primary" id="progress-btn">Progress report</button>
+      </div>
+
+      <div class="card" id="continue-card">
+        <h2>Continue where you left off</h2>
+        <ul id="in-progress" class="history"></ul>
+      </div>
+
+      <div class="grid-2">
+        <form id="new-session-form" class="card">
+          <h2>Start a new session</h2>
+          <label>Grade
+            <select id="grade" required>
+              <option value="K">Kindergarten</option>
+              <option>1</option><option>2</option><option>3</option><option>4</option>
+              <option selected>5</option><option>6</option><option>7</option><option>8</option>
+              <option>9</option><option>10</option><option>11</option><option>12</option>
+            </select>
+          </label>
+          <label>Math topic
+            <select id="topic-select" required></select>
+          </label>
+          <label class="check"><input type="checkbox" id="all-grades" /> Show topics for all grades</label>
+          <label id="new-topic-wrap" class="hidden">New topic
+            <input id="new-topic" maxlength="120" placeholder="e.g. Tessellations, Number bases, Tips and taxes" autocomplete="off" />
+            <span class="muted small">It will be saved and offered in the list next time.</span>
+          </label>
+          <div class="form-row">
+            <label>Number of questions
+              <select id="num-questions">
+                <option>3</option><option>5</option><option>8</option><option selected>10</option>
+                <option>12</option><option>15</option><option>20</option><option>25</option>
+              </select>
+            </label>
+            <label>Session time
+              <select id="session-time">
+                <option value="" selected>No time limit</option>
+                <option value="10">10 minutes</option><option value="15">15 minutes</option>
+                <option value="20">20 minutes</option><option value="30">30 minutes</option>
+                <option value="45">45 minutes</option><option value="60">60 minutes</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </label>
+          </div>
+          <label>Re-attempts before showing the answer
+            <select id="reattempts">
+              <option value="0" selected>None (show the answer right away)</option>
+              <option value="1">1 re-attempt</option>
+              <option value="2">2 re-attempts</option>
+              <option value="3">3 re-attempts</option>
+            </select>
+          </label>
+          <label id="custom-time-wrap" class="hidden">Custom session time (minutes)
+            <input id="custom-time" type="number" min="1" max="180" value="25" />
+          </label>
+          <p class="muted small" id="session-plan"></p>
+          <button type="submit" class="btn primary">Start session</button>
+          <p class="muted small">The agent maps the topic's fundamental concepts, then picks each
+            problem to learn the most about what the student knows. It probes gaps, checks
+            prerequisites, and stretches strengths. Every problem has its own timer; the session
+            clock runs only while a problem is on screen. You can leave at any time and continue
+            later; the clocks pause while you're away.</p>
+        </form>
+
+        <div class="card">
+          <h2>Completed sessions</h2>
+          <p class="muted small" id="completed-hint"></p>
+          <ul id="completed" class="history"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading -->
+    <section id="screen-loading" class="screen hidden">
+      <div class="card center">
+        <div class="spinner"></div>
+        <p id="loading-text">Working…</p>
+      </div>
+    </section>
+
+    <!-- Question -->
+    <section id="screen-question" class="screen hidden">
+      <div class="card">
+        <div class="q-header">
+          <div>
+            <div class="progress-label" id="q-progress"></div>
+            <div class="qdots" id="q-dots" aria-hidden="true"></div>
+            <div class="session-clock hidden" id="session-clock">Session time left: <strong id="session-clock-text"></strong></div>
+          </div>
+          <div class="timer" id="timer" aria-live="polite">
+            <svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="16"/><circle id="timer-ring" class="ring" cx="18" cy="18" r="16"/></svg>
+            <span id="timer-text">0:00</span>
+          </div>
+        </div>
+
+        <div class="tags" id="q-tags"></div>
+        <div class="difficulty">
+          <span class="small muted">Difficulty:</span>
+          <span class="level-badge" id="q-level"></span>
+        </div>
+
+        <p class="q-text" id="q-text"></p>
+        <div class="retry-box hidden" id="retry-box" role="status" aria-live="polite"></div>
+
+        <form id="answer-form">
+          <div id="choices" class="choices"></div>
+          <input id="short-answer" class="short-answer hidden" autocomplete="off" placeholder="Your answer" />
+          <p class="muted small" id="q-hint"></p>
+          <p class="small attempt-label hidden" id="q-attempts"></p>
+          <div class="row-between">
+            <button type="submit" class="btn primary" id="submit-btn">Submit answer</button>
+            <button type="button" class="btn" id="save-exit-btn">Save &amp; exit</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Feedback -->
+    <section id="screen-feedback" class="screen hidden">
+      <div class="grid-feedback">
+        <div class="card">
+          <div id="fb-banner" class="banner"></div>
+          <div class="fb-grid">
+            <div><span class="muted small">Your answer</span><div id="fb-yours" class="fb-val"></div></div>
+            <div><span class="muted small">Correct answer</span><div id="fb-correct" class="fb-val"></div></div>
+            <div><span class="muted small">Time</span><div id="fb-time" class="fb-val"></div></div>
+          </div>
+          <p id="fb-note"></p>
+          <p id="fb-misconception" class="misconception hidden"></p>
+          <div id="fb-attempts" class="hidden"></div>
+          <p id="fb-session" class="small muted hidden"></p>
+          <h3>Solution</h3>
+          <ol id="fb-steps" class="steps"></ol>
+          <div class="visual-box">
+            <button type="button" class="btn" id="fb-visual-btn">🖼 Explain with a picture</button>
+            <div id="fb-visual"></div>
+          </div>
+          <h3>Concepts used</h3>
+          <ul id="fb-concepts" class="concepts"></ul>
+          <div class="row-between">
+            <button class="btn primary" id="next-btn">Next problem</button>
+            <button class="btn" id="fb-exit-btn">Save &amp; exit</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="mt0">Why this problem</h3>
+          <p id="fb-why" class="small"></p>
+          <h3>What the agent learned</h3>
+          <ul id="fb-learned" class="learned"></ul>
+          <h3>Concept map so far</h3>
+          <div id="fb-profile" class="bars"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Session report -->
+    <section id="screen-report" class="screen hidden">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h2 id="r-title"></h2>
+            <p class="muted" id="r-sub"></p>
+          </div>
+          <div class="actions">
+            <button class="btn danger" id="r-delete">Delete session</button>
+            <button class="btn" id="r-back">Back to dashboard</button>
+          </div>
+        </div>
+        <div class="stats" id="r-stats"></div>
+        <h3>Difficulty path</h3>
+        <div class="trajectory" id="r-trajectory"></div>
+        <h3>Summary</h3>
+        <p id="r-summary"></p>
+        <p><strong>Estimated level:</strong> <span id="r-level"></span></p>
+        <div id="r-rootcauses"></div>
+      </div>
+
+      <div class="card">
+        <h2>Fundamental concepts breakdown</h2>
+        <div id="r-concepts" class="concept-cards"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><h3 class="mt0">Accuracy by problem kind</h3><div id="r-breakdown"></div></div>
+        <div class="card"><h3 class="mt0">Misconceptions</h3><p id="r-misc"></p>
+          <h3>Timing</h3><p id="r-timing"></p></div>
+      </div>
+
+      <div class="card">
+        <h2>Question by question</h2>
+        <div id="r-questions"></div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card"><h3 class="mt0">Strengths</h3><ul id="r-strengths"></ul></div>
+        <div class="card"><h3 class="mt0">Areas to improve</h3><ul id="r-improve"></ul></div>
+        <div class="card"><h3 class="mt0">Next steps</h3><ul id="r-next"></ul></div>
+      </div>
+    </section>
+
+    <!-- Holistic progress report -->
+    <section id="screen-progress" class="screen hidden">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h2 id="pg-title" class="mt0"></h2>
+            <p class="muted" id="pg-sub"></p>
+          </div>
+          <button class="btn" id="pg-back">Back to dashboard</button>
+        </div>
+        <div class="stats" id="pg-stats"></div>
+      </div>
+
+      <div class="card">
+        <h2>Ability over time</h2>
+        <p class="muted small">Overall ability at the end of each completed session, on the 1–10
+          difficulty scale. The gray line marks grade level.</p>
+        <div class="chart-wrap" id="pg-chart"></div>
+        <details class="table-view">
+          <summary class="small">Show as table</summary>
+          <table class="data-table" id="pg-trend-table"></table>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row-between">
+          <h2 class="mt0">Coach summary</h2>
+          <button class="btn small-btn" id="pg-summary-btn">Generate</button>
+        </div>
+        <p class="muted small" id="pg-summary-status"></p>
+        <div id="pg-summary"></div>
+      </div>
+
+      <div class="card">
+        <h2>Concept mastery by strand</h2>
+        <p class="muted small">Every concept assessed across all sessions. ▲/▼ show growth since the
+          concept was first assessed.</p>
+        <div id="pg-areas"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3 class="mt0">Strengths</h3><ul id="pg-strengths"></ul>
+          <h3>Focus areas</h3><ul id="pg-focus"></ul>
+        </div>
+        <div class="card">
+          <h3 class="mt0">Misconceptions over time</h3>
+          <ul id="pg-misc" class="misc-list"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Topics</h2>
+        <table class="data-table" id="pg-topics"></table>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><h3 class="mt0">Accuracy by problem kind</h3><div id="pg-breakdown"></div></div>
+        <div class="card"><h3 class="mt0">Timing habits</h3><div id="pg-timing"></div></div>
+      </div>
+    </section>
+
+    <div id="error" class="error hidden"></div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

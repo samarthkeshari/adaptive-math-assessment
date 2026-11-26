@@ -1,0 +1,4 @@
+fastapi>=0.115
+uvicorn>=0.34
+anthropic>=2.14.0   # Claude (default provider)
+openai>=3.60        # OpenAI, Gemini, DeepSeek, Qwen, and self-hosted Gemma/Qwen/DeepSeek via OpenAI-compatible APIs
