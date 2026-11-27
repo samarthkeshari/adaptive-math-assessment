@@ -1,0 +1,19 @@
+README.md
+  s_317405eb6d04bc::t_fb2aeab45f4b43 81,83-87,90-94,97-98,101-102,104,106-116,118,121-123,126,131-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f4e9227b7e3baf8ce92f389fefb991de91cf4f11",
+  "prompts": {},
+  "sessions": {
+    "s_317405eb6d04bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fd3b2cc7-92e5-4560-8cf5-cbdea33377c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Samarth Keshari <samarth.keshari@gmail.com>"
+    }
+  }
+}
