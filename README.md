@@ -78,34 +78,58 @@ variable names also work: `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY_HELPER`.
 To find your gateway values, look in `~/.claude/settings.json`: `apiKeyHelper` is the
 helper command and `env.ANTHROPIC_BASE_URL` is the gateway URL.
 
-### Keep both configured and switch per run (`.env`)
+### `.env` file: API keys and settings
 
-Create a file named `.env` next to `start.sh`. Values exported in your shell take precedence
-over it.
+Put your keys and settings in a file named `.env` in the project root, next to `start.sh`.
+`./start.sh` loads it on every run. It's in `.gitignore`, so it's never committed. Values
+already exported in your shell take precedence over `.env`.
+
+Template (copy it into `.env`, then replace the placeholders):
 
 ```bash
-# .env: fill in either or both sections
-# Direct Anthropic API
+# Environment for ./start.sh (variables exported in your shell take precedence).
+# Holds secrets: git-ignored, never commit it.
+# Choose per run:  ./start.sh direct  |  ./start.sh gateway  |  ./start.sh (auto)
+
+# --- Direct Anthropic API (key from https://console.anthropic.com/)
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 
-# Company AI gateway
+# --- Company AI gateway
+# Values are in ~/.claude/settings.json: env.ANTHROPIC_BASE_URL and apiKeyHelper.
 GATEWAY_BASE_URL=https://your-ai-gateway.example.com
 GATEWAY_TOKEN_HELPER="~/.claude/your-token-helper --quiet"
+# Seconds between gateway token refreshes:
+# ANTHROPIC_API_KEY_HELPER_TTL=300
 
-# Optional
+# --- Model / provider (Claude is the default)
 # LLM_MODEL=claude-opus-5-5
+# Other providers: openai, gemini, deepseek, qwen, ollama, vllm, openai_compatible
+# LLM_PROVIDER=anthropic
+# OPENAI_API_KEY=
+# GEMINI_API_KEY=
+# DEEPSEEK_API_KEY=
+# DASHSCOPE_API_KEY=
+# LLM_BASE_URL=
+# LLM_API_KEY=
+# LLM_JSON_MODE=schema
+
+# --- Server / storage
 # PORT=8000
+# DATA_DIR=./data
 ```
 
-Then:
+Format rules: one `KEY=value` per line, no spaces around `=`, quotes optional. Put
+comments on **their own line**: text after a value (`KEY=value  # note`) becomes part of
+the value. You can fill in both the direct and the gateway sections and choose per run:
 
 ```bash
-./start.sh direct     # uses ANTHROPIC_API_KEY
+./start.sh direct     # uses ANTHROPIC_API_KEY (gateway settings are ignored and cleared)
 ./start.sh gateway    # uses GATEWAY_BASE_URL + GATEWAY_TOKEN_HELPER
 ./start.sh            # auto: gateway if a token helper is configured, otherwise direct
 ```
 
-`.env` holds secrets. Keep it out of version control (it's in `.gitignore`).
+The footer of the home page shows the active connection (*via direct API* or
+*via gateway (…)*), so you can confirm which one is in use.
 
 ### Other options
 
