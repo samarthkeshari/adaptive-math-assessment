@@ -1,0 +1,36 @@
+backend/tests/test_offline.py
+  s_317405eb6d04bc::t_b2b422c0e3367e 530-569,579
+backend/main.py
+  s_317405eb6d04bc::t_c9128450b341e3 131-136
+frontend/styles.css
+  s_317405eb6d04bc::t_845ba37a200d22 292-297
+frontend/app.js
+  s_317405eb6d04bc::t_e2046a9f8d3d01 665-697
+  s_317405eb6d04bc::t_845ba37a200d22 181,194-197,655,663-664,698-766,996-1001
+backend/engine/agent.py
+  s_317405eb6d04bc::t_c9128450b341e3 317-353,362
+frontend/index.html
+  s_317405eb6d04bc::t_845ba37a200d22 46-49,250-284
+README.md
+  s_317405eb6d04bc::t_5d1594035c93ea 203-210,348
+docs/DESIGN.md
+  s_317405eb6d04bc::t_314207d42890b3 467
+docs/SPECIFICATION.md
+  s_317405eb6d04bc::t_6f3a3dc5d5f5f5 141,220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c883ccb0e0a96fec89f6b25eb5012f07200a7c15",
+  "prompts": {},
+  "sessions": {
+    "s_317405eb6d04bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fd3b2cc7-92e5-4560-8cf5-cbdea33377c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Samarth Keshari <samarth.keshari@gmail.com>"
+    }
+  }
+}
