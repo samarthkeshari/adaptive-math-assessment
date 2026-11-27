@@ -186,6 +186,11 @@ Offline tests (stub LLM, no key needed), from the project root: `python3 -m back
        own timer is capped by the session time left. When the session clock reaches 0, the
        current answer is submitted, the session ends, and the report covers the questions
        answered and says time ran out.
+     - **Timer per question:** *AI-chosen* (default: a limit that fits each problem,
+       30 s–10 min), *Fixed time per question* (30 s, 45 s, 1, 1.5, 2, 3, 5 or 10 minutes, the
+       same for every question), or *No timer* (untimed practice: no countdown, no automatic
+       submit, and no session time limit). With a session time limit, each question's timer
+       is also capped by the session time left.
      - **Re-attempts before showing the answer:** none (default), 1, 2 or 3. After a wrong
        answer with tries left, the answer and solution stay hidden. The student sees
        "Not quite, try again (N tries left)" with a hint based on the detected mistake, and a
@@ -208,8 +213,11 @@ Offline tests (stub LLM, no key needed), from the project root: `python3 -m back
      re-attempts) and search by text. Unfinished sessions have a **Review** button that opens
      this screen for just that session. A question that's still open, or mid-retry, is never
      shown, so its answer can't be seen early.
-3. **During a session**: **Save & exit** (or just closing the tab) pauses the question's
-   timer, so the session can be continued later with the same time left.
+3. **During a session**: **⏸ Pause** stops both clocks and hides the problem until the
+   student clicks **Resume**, so they can't keep working on it with the clock stopped.
+   **Save & exit** (or just closing the tab) also pauses, so the session can be continued
+   later with the same time left. Untimed sessions have no Pause button, since there's no
+   clock to stop.
 4. **Explain with a picture**: after answering, the student can ask for a pictorial
    explanation. The AI draws 2–4 labeled diagrams that build up the solution (fraction bars,
    number lines, area models, tape diagrams, arrays, shapes, graphs). After a wrong answer it
@@ -348,7 +356,7 @@ running.
 | `GET /api/students/{name}/questions` | every answered question with answers, solutions and explanations, grouped by session |
 | `GET /api/students/{name}/progress` | the full progress report (plus the latest saved coach summary) |
 | `POST /api/students/{name}/progress/summary` | generate and save a new coach summary |
-| `POST /api/tests` | start a session `{student_name, topic, grade, num_questions, time_limit_minutes, reattempts}` (`time_limit_minutes: null` = no limit; `reattempts` 0–3) |
+| `POST /api/tests` | start a session `{student_name, topic, grade, num_questions, time_limit_minutes, reattempts, timer_mode, seconds_per_question}` (`time_limit_minutes: null` = no limit; `reattempts` 0–3; `timer_mode` `auto` / `fixed` (needs `seconds_per_question` 30–600) / `off` (no session limit allowed)) |
 | `POST /api/tests/{id}/next` | the open question (resumes its timer) or the next adaptive one |
 | `POST /api/tests/{id}/answer` | submit `{idx, answer}`. Returns `{retry: true, attempts_left, note, hint, question}` while tries remain, else the full feedback plus what the agent learned |
 | `POST /api/tests/{id}/pause` | pause the open question's timer |

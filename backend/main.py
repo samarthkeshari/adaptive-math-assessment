@@ -11,7 +11,9 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 from backend.engine import topics
 from backend.engine.agent import AgentError, AssessmentAgent
@@ -51,6 +53,17 @@ class StartRequest(BaseModel):
     num_questions: int = Field(default=10, ge=3, le=25)
     time_limit_minutes: int | None = Field(default=None, ge=1, le=180)  # None = no session limit
     reattempts: int = Field(default=0, ge=0, le=3)  # extra tries before the answer is shown
+    # Per-question timing: AI-chosen, a fixed number of seconds, or untimed practice.
+    timer_mode: Literal["auto", "fixed", "off"] = "auto"
+    seconds_per_question: int | None = Field(default=None, ge=30, le=600)
+
+    @model_validator(mode="after")
+    def _check_timer(self):
+        if self.timer_mode == "fixed" and self.seconds_per_question is None:
+            raise ValueError("timer_mode 'fixed' needs seconds_per_question (30-600)")
+        if self.timer_mode == "off" and self.time_limit_minutes is not None:
+            raise ValueError("an untimed session (timer_mode 'off') can't have a session time limit")
+        return self
 
 
 class AnswerRequest(BaseModel):
@@ -78,7 +91,8 @@ def list_topics(grade: str | None = None) -> dict:
 @app.post("/api/tests")
 async def start_test(req: StartRequest) -> dict:
     sid = await agent().start(req.student_name.strip(), " ".join(req.topic.split()), req.grade.strip(),
-                              req.num_questions, req.time_limit_minutes, req.reattempts)
+                              req.num_questions, req.time_limit_minutes, req.reattempts,
+                              req.timer_mode, req.seconds_per_question)
     return {"test_id": sid}
 
 

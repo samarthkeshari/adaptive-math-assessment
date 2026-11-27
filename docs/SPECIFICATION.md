@@ -92,6 +92,7 @@ implemented.
 | F-1.5 | New topics are saved and offered under "Your topics" in later sessions, for all students | S |
 | F-1.6 | **Session time limit**: none, preset (10–60 min), or custom (1–180 min) | M |
 | F-1.8 | **Re-attempts before showing the answer**: none (default), 1, 2 or 3 per session | M |
+| F-1.10 | **Timer per question**: AI-chosen (default), fixed seconds per question (30–600), or no timer (untimed: no countdown, no auto-submit, no session limit) | M |
 | F-1.9 | **Delete a session** (unfinished or completed) from the dashboard or session report, after confirmation. Deletion is permanent: the session's records are removed from storage, the student's memory, progress report and future priors are recalculated without it, and saved coach summaries become stale | M |
 | F-1.7 | A student can leave mid-session (*Save & exit* or closing the tab) and continue later from the same question | M |
 
@@ -124,6 +125,7 @@ implemented.
 | F-3.7 | **Explain with a picture**: after answering, the student can request 2–4 labeled diagrams that build up the solution, plus a panel showing why a wrong answer can't be right | M |
 | F-3.8 | Pictorial explanations are generated once per problem, saved, and shown again in the session report | S |
 | F-3.9 | Answer keys and diagnostics are never sent to the browser before the problem is answered | M |
+| F-3.12 | **Pause** on the question screen stops both clocks and hides the problem until *Resume*; resuming restores the remaining time. Not shown for untimed sessions | M |
 | F-3.10 | **Re-attempts**: a session can allow 0–3 re-attempts per problem. After a wrong answer with tries left, the answer and solution stay hidden; the student gets a hint from the detected misconception (never revealing the answer); multiple-choice options already tried are disabled; the problem's timer keeps running | M |
 | F-3.11 | The answer is revealed on a correct answer, when tries run out, or when the problem or session time runs out. Correct after a retry earns partial credit; every wrong attempt's misconception is recorded; reports show first-try vs after-retry results and earlier tries per problem | M |
 
@@ -217,6 +219,7 @@ implemented.
 | AC-11 | A picture can't be requested before answering; once generated it is reused, not regenerated | `test_svg_sanitizer` |
 | AC-12 | Direct mode removes an inherited gateway URL | `start.sh` mode tests |
 | AC-13 | A real session runs end to end on Claude through the company gateway | live run (163 s, 5 items) |
+| AC-17 | Fixed mode gives every question the chosen limit (AI suggestion kept) and still times out; untimed questions have no limit, never time out, and reports/progress work; invalid timer combinations are rejected (422); pause + resume preserves the remaining time; settings survive restart | `test_timer_modes` |
 | AC-16 | The question history lists finished and unfinished sessions newest first, includes saved pictures, never includes the open or mid-retry question, returns 404 for unknown students, and drops deleted sessions | `test_question_history` |
 | AC-15 | Deleting a session removes it from history, `events.jsonl` and `tests.jsonl`; progress and memory are rebuilt without its evidence; the coach summary is stale; other students are unaffected; a second delete returns 404; late events for it are ignored; the student remains listed with 0 sessions; restart reproduces the state | `test_delete_session` |
 | AC-14 | With re-attempts, a wrong answer with tries left returns no answer key or solution; the tried option is remembered; correct on try 3 scores outcome 0.5 with both misconceptions recorded; time-out ends retries; 0 re-attempts behaves as before; state survives restart | `test_reattempts` |

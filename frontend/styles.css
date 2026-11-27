@@ -295,3 +295,8 @@ label.check input { width: auto; margin: 0; }
 .filters label { margin-bottom: 0; }
 .review-session h3 { font-size: 17px; }
 .review-session details.qa:first-of-type { margin-top: 12px; }
+
+/* ---- pause & timer modes ---- */
+.paused-panel { text-align: center; padding: 40px 20px; margin: 10px 0; border: 1px dashed var(--border); border-radius: 12px; }
+.paused-icon { font-size: 36px; color: var(--muted); margin-bottom: 6px; }
+select:disabled { background: #f1f2f6; color: var(--muted); }

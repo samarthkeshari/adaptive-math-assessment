@@ -116,7 +116,8 @@ def build_progress(memory: Memory, key: str) -> dict | None:
     misconceptions.sort(key=lambda r: (r["status"] != "still present", -r["count"]))
 
     times = [it["response"]["time_taken"] for it in items]
-    fracs = [it["response"]["time_taken"] / it["item"]["time_limit_seconds"] for it in items]
+    fracs = [it["response"]["time_taken"] / it["item"]["time_limit_seconds"] for it in items
+             if it["item"]["time_limit_seconds"]]                # skip untimed questions
     score = sum(1 for it in items if it["response"]["is_correct"] and not it["response"]["timed_out"])
     latest = trend[-1]["ability"] if trend else None
     return {

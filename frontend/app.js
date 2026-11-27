@@ -186,7 +186,8 @@ async function openStudent(name) {
         el("div", { class: "h-topic" }, t.topic),
         el("div", { class: "small muted" },
           `Grade ${t.grade} · started ${fmtDate(t.started_at)} · last active ${fmtDate(t.last_activity)}`
-          + (t.time_limit_minutes ? ` · ${fmtTime(t.session_time_left)} of ${t.time_limit_minutes} min left` : "")),
+          + (t.time_limit_minutes ? ` · ${fmtTime(t.session_time_left)} of ${t.time_limit_minutes} min left` : "")
+          + (t.timer_mode === "off" ? " · untimed" : t.timer_mode === "fixed" ? ` · ${fmtTime(t.seconds_per_question)} per question` : "")),
         el("div", { class: "mini-progress" }, el("div", { style: `width:${(100 * t.answered) / t.num_questions}%` }))),
       el("span", { class: "actions" },
         el("span", { class: "small muted" }, `${t.answered}/${t.num_questions} answered`),
@@ -274,13 +275,22 @@ function sessionMinutes() {
 }
 
 function updateSessionPlan() {
+  const mode = $("timer-mode").value;
+  $("fixed-time-wrap").classList.toggle("hidden", mode !== "fixed");
+  // An untimed session has no session clock either.
+  $("session-time").disabled = mode === "off";
+  if (mode === "off") $("session-time").value = "";
   $("custom-time-wrap").classList.toggle("hidden", $("session-time").value !== "custom");
   const n = parseInt($("num-questions").value, 10);
   const m = sessionMinutes();
   const r = parseInt($("reattempts").value, 10) || 0;
-  $("session-plan").textContent = (m
+  const perQ = parseInt($("seconds-per-question").value, 10);
+  const timing = mode === "off" ? " Untimed practice: no clock on any question."
+    : mode === "fixed" ? ` Every question gets ${fmtTime(perQ)}.`
+    : " Each question gets a time limit that fits it (chosen by the AI).";
+  $("session-plan").textContent = (mode === "off" ? `${n} questions.` : m
     ? `${n} questions in ${m} minutes: about ${fmtTime((m * 60) / n)} per question. If time runs out, the session ends and the report covers the questions answered.`
-    : `${n} questions, no overall time limit (each problem still has its own timer).`)
+    : `${n} questions, no overall time limit.`) + timing
     + (r ? ` After a wrong answer the student can try again ${r === 1 ? "once" : `${r} times`} (with a hint) before the answer is shown.` : "");
 }
 
@@ -299,7 +309,10 @@ async function startSession(evt) {
     num_questions: parseInt($("num-questions").value, 10) || 10,
     time_limit_minutes: sessionMinutes(),
     reattempts: parseInt($("reattempts").value, 10) || 0,
+    timer_mode: $("timer-mode").value,
+    seconds_per_question: $("timer-mode").value === "fixed" ? parseInt($("seconds-per-question").value, 10) : null,
   };
+  if (body.timer_mode === "off") body.time_limit_minutes = null;
   loading("Mapping the fundamental concepts of this topic…");
   try {
     const { test_id } = await api("/api/tests", { method: "POST", body });
@@ -315,8 +328,8 @@ async function resumeTest(testId) {
   await nextQuestion();
 }
 
-async function nextQuestion() {
-  loading("Choosing what to check next and writing your problem…");
+async function nextQuestion(message = "Choosing what to check next and writing your problem…") {
+  loading(message);
   try {
     const data = await api(`/api/tests/${state.testId}/next`, { method: "POST" });
     if (data.done) return finishTest();
@@ -325,6 +338,29 @@ async function nextQuestion() {
     showError(e.message);
     openStudent(state.student);
   }
+}
+
+// Pause in place: stop both clocks on the server and hide the problem until resumed.
+async function pauseQuestion() {
+  if (state.submitting) return;
+  stopTimer();
+  $("pause-btn").disabled = true;
+  try {
+    await api(`/api/tests/${state.testId}/pause`, { method: "POST" });
+    $("q-body").classList.add("hidden");
+    $("paused-panel").classList.remove("hidden");
+    state.screen = "paused";                                 // nothing left to pause on exit
+  } catch (e) {
+    showError(e.message);
+    startTimer((state.deadline - Date.now()) / 1000, state.question.time_limit_seconds);
+  } finally {
+    $("pause-btn").disabled = false;
+  }
+}
+
+async function resumeQuestion() {
+  // /next returns the same open question and restarts its clock from the time left.
+  await nextQuestion("Resuming…");
 }
 
 // Stop the server-side clock when the student leaves an open question.
@@ -390,6 +426,11 @@ function renderQuestion(q) {
   $("submit-btn").disabled = false;
   show("question");
   if (q.answer_format !== "multiple_choice") input.focus();
+  const timed = q.remaining_seconds != null;
+  $("timer").classList.toggle("hidden", !timed);
+  $("pause-btn").classList.toggle("hidden", !timed);       // nothing to pause when untimed
+  $("paused-panel").classList.add("hidden");
+  $("q-body").classList.remove("hidden");
   state.sessionLimit = q.session_time_limit_seconds;
   state.sessionDeadline = q.session_remaining_seconds != null ? Date.now() + q.session_remaining_seconds * 1000 : null;
   $("session-clock").classList.toggle("hidden", state.sessionDeadline == null);
@@ -398,6 +439,7 @@ function renderQuestion(q) {
 
 function startTimer(remaining, limit) {
   stopTimer();
+  if (remaining == null) return;                           // untimed question
   state.deadline = Date.now() + remaining * 1000;
   const tick = () => {
     const left = (state.deadline - Date.now()) / 1000;
@@ -482,7 +524,8 @@ function renderFeedback(q, answer, r) {
   const mc = q.answer_format === "multiple_choice";
   $("fb-yours").textContent = answer ? (mc ? choiceLabel(r.choices, answer) : answer) : "(no answer)";
   $("fb-correct").textContent = mc ? choiceLabel(r.choices, r.correct_answer) : r.correct_answer;
-  $("fb-time").textContent = `${fmtTime(r.time_taken)} / ${fmtTime(q.time_limit_seconds)}`;
+  $("fb-time").textContent = q.time_limit_seconds
+    ? `${fmtTime(r.time_taken)} / ${fmtTime(q.time_limit_seconds)}` : `${fmtTime(r.time_taken)} (untimed)`;
   $("fb-note").textContent = r.note;
   const misc = $("fb-misconception");
   misc.classList.toggle("hidden", !r.misconception);
@@ -675,7 +718,7 @@ function questionCard(testId, q, { open = false } = {}) {
       (q.attempt_count || 1) > 1 ? el("span", { class: "badge warn" }, `${q.attempt_count} tries`) : null,
       el("span", { class: "badge neutral" }, q.question_type === "word" ? "Word" : "Direct"),
       el("span", { class: "badge neutral" }, DIMENSION_LABELS[q.dimension]),
-      el("span", { class: "small muted" }, `${q.focus} · ${fmtTime(q.time_taken)} / ${fmtTime(q.time_limit_seconds)}`)),
+      el("span", { class: "small muted" }, `${q.focus} · ${fmtTime(q.time_taken)}${q.time_limit_seconds ? ` / ${fmtTime(q.time_limit_seconds)}` : " (untimed)"}`)),
     el("div", { class: "qa-body" },
       el("p", { class: "small muted" }, `Why asked: ${q.rationale}`),
       el("p", {}, q.question_text),
@@ -982,11 +1025,13 @@ $("new-session-form").addEventListener("submit", startSession);
 $("grade").addEventListener("change", loadTopics);
 $("all-grades").addEventListener("change", loadTopics);
 $("topic-select").addEventListener("change", onTopicChange);
-["num-questions", "session-time", "reattempts"].forEach((id) => $(id).addEventListener("change", updateSessionPlan));
+["num-questions", "session-time", "reattempts", "timer-mode", "seconds-per-question"].forEach((id) => $(id).addEventListener("change", updateSessionPlan));
 $("custom-time").addEventListener("input", updateSessionPlan);
 updateSessionPlan();
 $("answer-form").addEventListener("submit", submitAnswer);
 $("save-exit-btn").addEventListener("click", () => openStudent(state.student));
+$("pause-btn").addEventListener("click", pauseQuestion);
+$("resume-btn").addEventListener("click", resumeQuestion);
 $("fb-exit-btn").addEventListener("click", () => openStudent(state.student));
 $("home-link").addEventListener("click", showHome);
 $("nav-dashboard").addEventListener("click", () => openStudent(state.student));

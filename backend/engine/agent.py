@@ -49,7 +49,14 @@ class AssessmentAgent:
 
     # ------------------------------------------------------------------ start
     async def start(self, student_name: str, topic: str, grade: str, num_questions: int,
-                    time_limit_minutes: int | None = None, reattempts: int = 0) -> str:
+                    time_limit_minutes: int | None = None, reattempts: int = 0,
+                    timer_mode: str = "auto", seconds_per_question: int | None = None) -> str:
+        """timer_mode: "auto" (AI picks each question's time), "fixed" (seconds_per_question
+        for every question) or "off" (untimed: no per-question limit, no session limit)."""
+        if timer_mode == "off":
+            time_limit_minutes = None
+        if timer_mode != "fixed":
+            seconds_per_question = None
         key = map_key(topic, grade)
         async with self._locks[f"map:{key}"]:
             cmap = self.memory.concept_maps.get(key)
@@ -66,7 +73,8 @@ class AssessmentAgent:
             "type": "session_started", "session_id": session_id, "student_key": skey,
             "student_name": student_name, "topic": topic, "grade": grade,
             "num_questions": num_questions, "time_limit_minutes": time_limit_minutes,
-            "reattempts": reattempts,
+            "reattempts": reattempts, "timer_mode": timer_mode,
+            "seconds_per_question": seconds_per_question,
             "concept_map_key": key, "llm": self.llm.describe(),
             "prior": prior, "prior_overall": prior_overall,
         })
@@ -98,6 +106,12 @@ class AssessmentAgent:
                 list(s["proficiency"].get(pid).misconceptions) + remembered.get(pid, [])))
             item = await self._llm_call(
                 item_writer.write_item(self.llm, s["topic"], s["grade"], spec, items, known))
+            # Session timing choice overrides the AI's suggested limit (kept for reference).
+            item["suggested_time_limit_seconds"] = item["time_limit_seconds"]
+            if s["timer_mode"] == "fixed":
+                item["time_limit_seconds"] = s["seconds_per_question"]
+            elif s["timer_mode"] == "off":
+                item["time_limit_seconds"] = None
             await self.memory.record({"type": "item_served", "session_id": session_id,
                                       "idx": len(items), "spec": spec, "item": item})
             return {"done": False, "question": self._public(s, len(items) - 1)}
@@ -106,9 +120,10 @@ class AssessmentAgent:
         """The question as shown to the student: no answer key or diagnostics."""
         it = s["items"][idx]
         spec, item = it["spec"], it["item"]
-        remaining = item["time_limit_seconds"] - time_used(it)
+        limit = item["time_limit_seconds"]                       # None = untimed session
+        remaining = limit - time_used(it) if limit is not None else None
         session_left = session_time_left(s)
-        if session_left is not None:
+        if session_left is not None and remaining is not None:
             remaining = min(remaining, session_left)  # the session clock caps every question
         return {
             "idx": idx, "number": idx + 1, "total": s["num_questions"],
@@ -119,7 +134,8 @@ class AssessmentAgent:
             "answer_format": item["answer_format"], "question_text": item["question_text"],
             "choices": item["choices"], "answer_hint": item["answer_hint"],
             "time_limit_seconds": item["time_limit_seconds"],
-            "remaining_seconds": max(0, round(remaining)),
+            "remaining_seconds": max(0, round(remaining)) if remaining is not None else None,
+            "timer_mode": s["timer_mode"],
             "session_time_limit_seconds": s["time_limit_minutes"] * 60 if s["time_limit_minutes"] else None,
             "session_remaining_seconds": max(0, round(session_left)) if session_left is not None else None,
             "attempts_allowed": 1 + s["reattempts"],
@@ -142,8 +158,8 @@ class AssessmentAgent:
             if it["active_since"] is None:
                 raise AgentError("This question is paused. Continue the session first.", 409)
             elapsed = time_used(it)
-            limit = item["time_limit_seconds"]
-            timed_out = elapsed > limit + TIMER_GRACE_SECONDS
+            limit = item["time_limit_seconds"]                   # None = untimed session
+            timed_out = limit is not None and elapsed > limit + TIMER_GRACE_SECONDS
             time_taken = min(elapsed, float(limit)) if timed_out else elapsed
 
             verdict = await self._llm_call(grader.grade(self.llm, spec, item, answer))
@@ -301,7 +317,9 @@ class AssessmentAgent:
             "topic": s["topic"], "grade": s["grade"], "llm": s["llm"],
             "started_at": s["started_at"], "finished_at": s["finished_at"],
             "num_questions": s["num_questions"], "time_limit_minutes": s["time_limit_minutes"],
-            "reattempts": s["reattempts"], "session_time_used": round(session_time_used(s)),
+            "reattempts": s["reattempts"], "timer_mode": s["timer_mode"],
+            "seconds_per_question": s["seconds_per_question"],
+            "session_time_used": round(session_time_used(s)),
             "concept_map_key": s["concept_map_key"], "prior": s["prior"],
             "items": [
                 {"number": i + 1, "spec": it["spec"], "item": it["item"],
@@ -357,7 +375,8 @@ class AssessmentAgent:
             "grade": s["grade"], "status": s["status"], "started_at": s["started_at"],
             "finished_at": s["finished_at"], "num_questions": s["num_questions"], "llm": s["llm"],
             "time_limit_minutes": s["time_limit_minutes"], "session_time_used": round(session_time_used(s)),
-            "reattempts": s["reattempts"],
+            "reattempts": s["reattempts"], "timer_mode": s["timer_mode"],
+            "seconds_per_question": s["seconds_per_question"],
             "assessment": s["assessment"], "narrative": s["narrative"],
             "questions": self.answered_questions(s),
         }
@@ -367,7 +386,8 @@ class AssessmentAgent:
             {"id": s["id"], "topic": s["topic"], "grade": s["grade"], "status": s["status"],
              "started_at": s["started_at"], "last_activity": s["last_activity"],
              "finished_at": s["finished_at"], "num_questions": s["num_questions"],
-             "time_limit_minutes": s["time_limit_minutes"],
+             "time_limit_minutes": s["time_limit_minutes"], "timer_mode": s["timer_mode"],
+             "seconds_per_question": s["seconds_per_question"],
              "session_time_left": (round(max(0, session_time_left(s)))
                                    if s["time_limit_minutes"] else None),
              "answered": sum(1 for it in s["items"] if it["response"]),

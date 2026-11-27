@@ -60,7 +60,8 @@ def assess(cmap: dict, prof: ProficiencyModel, items: list[dict]) -> dict:
             root_causes.append({"concept": c["name"], "because_of": weak_prereqs})
 
     times = [it["response"]["time_taken"] for it in answered]
-    limits = [it["item"]["time_limit_seconds"] for it in answered]
+    timed = [(it["response"]["time_taken"], it["item"]["time_limit_seconds"]) for it in answered
+             if it["item"]["time_limit_seconds"]]                # untimed questions have no limit
     overall = prof.overall
     return {
         "overall_theta": round(overall.theta, 2),
@@ -72,7 +73,8 @@ def assess(cmap: dict, prof: ProficiencyModel, items: list[dict]) -> dict:
         "accuracy_by_perspective": _rate(answered, lambda it: it["spec"]["perspective"]),
         "timing": {
             "avg_seconds": round(sum(times) / len(times), 1) if times else None,
-            "avg_fraction_of_limit": round(sum(t / l for t, l in zip(times, limits)) / len(times), 2) if times else None,
+            "avg_fraction_of_limit": round(sum(t / l for t, l in timed) / len(timed), 2) if timed else None,
+            "untimed": len(answered) - len(timed),
             "timed_out": sum(1 for it in answered if it["response"]["timed_out"]),
         },
         "concepts": concepts,
@@ -165,7 +167,8 @@ async def write_narrative(llm: LLMProvider, session: dict, cmap: dict, assessmen
                + "; ".join(f"{a['answer']!r} [{a['misconception'] or 'no diagnosis'}]"
                            for a in r['attempts'][:-1]) + ")\n"
                if r.get("attempt_count", 1) > 1 else "")
-            + f"  Time: {r['time_taken']:.0f}s of {item['time_limit_seconds']}s"
+            + (f"  Time: {r['time_taken']:.0f}s of {item['time_limit_seconds']}s" if item["time_limit_seconds"]
+               else f"  Time: {r['time_taken']:.0f}s (untimed)")
         )
     concept_lines = "\n".join(
         f"- {c['id']} | {c['name']} [{c['area']}{', cross-area' if c['external'] else ''}] | "

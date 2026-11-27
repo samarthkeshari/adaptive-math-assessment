@@ -567,6 +567,62 @@ def test_question_history():
         assert [x["test_id"] for x in c.get("/api/students/ann/questions").json()["sessions"]] == [live]
 
 
+def test_timer_modes():
+    data_dir = Path(tempfile.mkdtemp())
+    server.app.state.agent = AssessmentAgent(StubLLM(), Memory(data_dir))
+    mem = lambda: server.app.state.agent.memory
+    start = lambda **kw: c.post("/api/tests", json={"student_name": "Ann", "topic": "Fractions", "grade": "5",
+                                                    "num_questions": 3, **kw})
+    with TestClient(server.app) as c:
+        # Validation
+        assert start(timer_mode="fixed").status_code == 422
+        assert start(timer_mode="off", time_limit_minutes=10).status_code == 422
+        assert start(timer_mode="fixed", seconds_per_question=10).status_code == 422
+        assert start(timer_mode="sometimes").status_code == 422
+
+        # Fixed: every question gets the chosen limit; the AI's suggestion is kept.
+        fixed = start(timer_mode="fixed", seconds_per_question=45).json()["test_id"]
+        q = c.post(f"/api/tests/{fixed}/next").json()["question"]
+        assert q["timer_mode"] == "fixed" and q["time_limit_seconds"] == 45 and 43 <= q["remaining_seconds"] <= 45
+        it = mem().sessions[fixed]["items"][0]
+        assert it["item"]["suggested_time_limit_seconds"] == 90
+        # Pause and continue: the remaining time is preserved.
+        it["active_since"] -= 20
+        c.post(f"/api/tests/{fixed}/pause")
+        resumed = c.post(f"/api/tests/{fixed}/next").json()["question"]
+        assert resumed["idx"] == q["idx"] and 23 <= resumed["remaining_seconds"] <= 26
+        it["active_since"] -= 60                                # now well past 45 s
+        r = c.post(f"/api/tests/{fixed}/answer", json={"idx": q["idx"], "answer": "A"}).json()
+        assert r["timed_out"] and r["time_taken"] == 45
+
+        # Off: no limits, never times out, and reports still work.
+        off = start(timer_mode="off").json()["test_id"]
+        for i in range(3):
+            q = c.post(f"/api/tests/{off}/next").json()["question"]
+            assert q["time_limit_seconds"] is None and q["remaining_seconds"] is None
+            assert q["session_time_limit_seconds"] is None
+            mem().sessions[off]["items"][i]["active_since"] -= 5000
+            mc = q["answer_format"] == "multiple_choice"
+            r = c.post(f"/api/tests/{off}/answer", json={"idx": q["idx"], "answer": "A" if mc else "0.75"}).json()
+            assert not r["timed_out"] and r["is_correct"] and r["time_taken"] > 4000
+        d = c.post(f"/api/tests/{off}/finish").json()
+        assert d["timer_mode"] == "off" and d["assessment"]["score"] == 3
+        assert d["assessment"]["timing"]["untimed"] == 3 and d["assessment"]["timing"]["avg_fraction_of_limit"] is None
+        assert all(x["time_limit_seconds"] is None for x in d["questions"])
+        prog = c.get("/api/students/Ann/progress").json()
+        assert prog["summary"]["questions_answered"] == 4
+        hist = {t["id"]: t for t in c.get("/api/students/Ann/tests").json()["tests"]}
+        assert hist[fixed]["seconds_per_question"] == 45 and hist[off]["timer_mode"] == "off"
+
+        # Default stays AI-chosen.
+        auto = start().json()["test_id"]
+        assert c.post(f"/api/tests/{auto}/next").json()["question"]["timer_mode"] == "auto"
+
+    replayed = Memory(data_dir)
+    assert replayed.sessions[fixed]["timer_mode"] == "fixed" and replayed.sessions[fixed]["seconds_per_question"] == 45
+    assert replayed.sessions[off]["timer_mode"] == "off"
+
+
 if __name__ == "__main__":
     test_llm_layer()
     test_anthropic_key_helper_and_fallback_retry()
@@ -577,4 +633,5 @@ if __name__ == "__main__":
     test_reattempts()
     test_delete_session()
     test_question_history()
+    test_timer_modes()
     print("All offline tests passed.")

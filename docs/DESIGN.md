@@ -274,6 +274,18 @@ question carries `attempts_allowed`, `attempts_used` and `previous_answers`, so 
 session restores the state (tried options disabled, last short answer prefilled). The
 session assessment adds `attempts{reattempts_allowed, first_try_correct, correct_after_retry}`.
 
+### 4.4b Timer modes and pause
+A session has `timer_mode` ∈ {`auto`, `fixed`, `off`} and `seconds_per_question` (only for
+`fixed`). After the item writer returns, the agent stores the AI's limit as
+`suggested_time_limit_seconds` and sets `time_limit_seconds` to the fixed value, or to `None`
+when untimed. Every consumer treats `None` as "no limit": the public question has
+`remaining_seconds: null`, `timed_out` is always false, assessment timing reports `untimed`
+and computes `avg_fraction_of_limit` over timed items only, the progress report skips
+untimed items in timing ratios, and the narrative prints "(untimed)". `off` forces
+`time_limit_minutes = None` (the API rejects the combination). **Pause** reuses
+`POST /pause` (`item_paused`). The UI hides the problem until **Resume**, which calls `/next`
+and gets the same item back via `item_resumed`, with the remaining time.
+
 ### 4.5 Timing (`backend/storage/memory.py`, `backend/engine/agent.py`)
 - Item time used = `elapsed + (now − active_since if running)`.
 - Session time used = Σ over items (`time_taken` if answered, else live time used).
