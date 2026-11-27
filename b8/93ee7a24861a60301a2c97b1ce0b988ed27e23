@@ -1,0 +1,41 @@
+backend/main.py
+  s_317405eb6d04bc::t_5805530c09155f 14-16,56-66,94-95
+backend/engine/agent.py
+  s_317405eb6d04bc::t_5805530c09155f 52-59,76-77,109-114,123-124,126,137-138,161-162,320-322,378-379,389-390
+backend/engine/assessment.py
+  s_317405eb6d04bc::t_5805530c09155f 63-64,76-77,170-171
+frontend/index.html
+  s_317405eb6d04bc::t_49808e94320478 93-109,125-127,167-174,185-188,191
+backend/storage/memory.py
+  s_317405eb6d04bc::t_5805530c09155f 200-201
+backend/tests/test_offline.py
+  s_317405eb6d04bc::t_15aca9ede0cc8e 570-625,636
+backend/engine/progress.py
+  s_317405eb6d04bc::t_5805530c09155f 119-120
+frontend/styles.css
+  s_317405eb6d04bc::t_49808e94320478 298-302
+frontend/app.js
+  s_317405eb6d04bc::t_49808e94320478 189-190,278-282,287-291,293,312-313,315,331-332,343-365,429-433,442,527-528,721,1028,1033-1034
+README.md
+  s_317405eb6d04bc::t_bf82b1b2fa7d99 189-193,216-220,359
+docs/DESIGN.md
+  s_317405eb6d04bc::t_c2349b57b874e8 277-288
+docs/SPECIFICATION.md
+  s_317405eb6d04bc::t_4f9c6df15fb8ec 95,128,222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b893ee7a24861a60301a2c97b1ce0b988ed27e23",
+  "prompts": {},
+  "sessions": {
+    "s_317405eb6d04bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fd3b2cc7-92e5-4560-8cf5-cbdea33377c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Samarth Keshari <samarth.keshari@gmail.com>"
+    }
+  }
+}
