@@ -128,6 +128,12 @@ def student_tests(name: str) -> dict:
     return {"student_name": name, "tests": agent().history(name)}
 
 
+@app.get("/api/students/{name}/questions")
+def student_questions(name: str) -> dict:
+    """Every answered question (answers, solutions, explanations) across all sessions."""
+    return agent().question_history(name)
+
+
 @app.get("/api/students/{name}/progress")
 def student_progress(name: str) -> dict:
     return agent().progress(name)

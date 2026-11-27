@@ -43,7 +43,10 @@
           <h2 id="dash-name" class="mt0"></h2>
           <p class="muted small" id="dash-sub"></p>
         </div>
-        <button class="btn primary" id="progress-btn">Progress report</button>
+        <div class="actions">
+          <button class="btn" id="questions-btn">All questions &amp; explanations</button>
+          <button class="btn primary" id="progress-btn">Progress report</button>
+        </div>
       </div>
 
       <div class="card" id="continue-card">
@@ -244,6 +247,41 @@
     </section>
 
     <!-- Holistic progress report -->
+    <!-- All answered questions across sessions -->
+    <section id="screen-review" class="screen hidden">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h2 id="rv-title" class="mt0"></h2>
+            <p class="muted" id="rv-sub"></p>
+          </div>
+          <button class="btn" id="rv-back">Back to dashboard</button>
+        </div>
+        <div class="filters">
+          <label>Session<select id="rv-session"></select></label>
+          <label>Topic<select id="rv-topic"></select></label>
+          <label>Result
+            <select id="rv-result">
+              <option value="">All results</option>
+              <option value="correct">Correct</option>
+              <option value="incorrect">Incorrect</option>
+              <option value="timed_out">Timed out</option>
+              <option value="retried">Needed re-attempts</option>
+            </select>
+          </label>
+          <label>Search<input id="rv-search" placeholder="Words in the question, concept…" autocomplete="off" /></label>
+        </div>
+        <div class="row-between">
+          <p class="small muted" id="rv-count"></p>
+          <span class="actions">
+            <button class="btn small-btn" id="rv-expand">Expand all</button>
+            <button class="btn small-btn" id="rv-collapse">Collapse all</button>
+          </span>
+        </div>
+      </div>
+      <div id="rv-list"></div>
+    </section>
+
     <section id="screen-progress" class="screen hidden">
       <div class="card">
         <div class="row-between">

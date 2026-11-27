@@ -138,6 +138,7 @@ implemented.
 | F-4.5 | Strengths, areas to improve, misconception insights, timing insights, next steps | M |
 | F-4.6 | All numbers in reports are computed by the system; the LLM only writes explanatory text and may not contradict the numbers | M |
 | F-4.7 | **Progress report** across all sessions: totals, ability-over-time chart (with table view), concept mastery by strand with growth, strengths/focus areas, misconceptions labeled *still present / improving / likely resolved*, topics table, accuracy by problem kind, timing habits | M |
+| F-4.9 | **All questions & explanations**: a per-student view of every answered question across all sessions (completed and unfinished), with answers, earlier tries, correct answer, solution, concepts, misconception, rationale, diagnosis and picture explanation; filterable by session, topic, result and text. Open or mid-retry questions are excluded | M |
 | F-4.8 | **Coach summary**: an optional LLM-written overview with a practice plan, saved and flagged as stale when newer results exist | S |
 
 ### 4.5 Storage
@@ -216,6 +217,7 @@ implemented.
 | AC-11 | A picture can't be requested before answering; once generated it is reused, not regenerated | `test_svg_sanitizer` |
 | AC-12 | Direct mode removes an inherited gateway URL | `start.sh` mode tests |
 | AC-13 | A real session runs end to end on Claude through the company gateway | live run (163 s, 5 items) |
+| AC-16 | The question history lists finished and unfinished sessions newest first, includes saved pictures, never includes the open or mid-retry question, returns 404 for unknown students, and drops deleted sessions | `test_question_history` |
 | AC-15 | Deleting a session removes it from history, `events.jsonl` and `tests.jsonl`; progress and memory are rebuilt without its evidence; the coach summary is stale; other students are unaffected; a second delete returns 404; late events for it are ignored; the student remains listed with 0 sessions; restart reproduces the state | `test_delete_session` |
 | AC-14 | With re-attempts, a wrong answer with tries left returns no answer key or solution; the tried option is remembered; correct on try 3 scores outcome 0.5 with both misconceptions recorded; time-out ends retries; 0 re-attempts behaves as before; state survives restart | `test_reattempts` |
 

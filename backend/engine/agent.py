@@ -314,8 +314,44 @@ class AssessmentAgent:
             "narrative": s["narrative"],
         }
 
+    def answered_questions(self, s: dict) -> list[dict]:
+        """Every *finished* question of a session with its answer key and explanations.
+        The open question (and one mid-retry) is excluded, so no answer leaks early."""
+        analysis = {a["question_number"]: a for a in (s["narrative"] or {}).get("question_analysis", [])}
+        return [
+            {"number": i + 1, "idx": i, "visual": it.get("visual"),
+             "mode": it["spec"]["mode"], "rationale": it["spec"]["rationale"],
+             "difficulty": it["spec"]["difficulty"], "question_type": it["spec"]["question_type"],
+             "dimension": it["spec"]["dimension"], "perspective": it["spec"]["perspective"],
+             "focus": it["spec"]["primary"]["name"],
+             "also": [c["name"] for c in it["spec"]["secondary"]],
+             "question_text": it["item"]["question_text"], "choices": it["item"]["choices"],
+             "correct_answer": it["item"]["correct_answer"],
+             "solution_steps": it["item"]["solution_steps"], "concepts": it["item"]["concepts"],
+             "time_limit_seconds": it["item"]["time_limit_seconds"],
+             "analysis": analysis.get(i + 1), **it["response"]}
+            for i, it in enumerate(s["items"]) if it["response"]
+        ]
+
+    def question_history(self, name: str) -> dict:
+        """All answered questions across a student's sessions (newest session first)."""
+        key = student_key(name)
+        if key not in self.memory.students:
+            raise AgentError("No sessions saved for this student yet", 404)
+        sessions = []
+        for s in self.memory.student_sessions(key):
+            questions = self.answered_questions(s)
+            if questions:
+                sessions.append({
+                    "test_id": s["id"], "topic": s["topic"], "grade": s["grade"],
+                    "status": s["status"], "started_at": s["started_at"],
+                    "finished_at": s["finished_at"], "num_questions": s["num_questions"],
+                    "questions": questions,
+                })
+        return {"student_name": self.memory.students[key]["name"], "sessions": sessions,
+                "total_questions": sum(len(x["questions"]) for x in sessions)}
+
     def detail(self, s: dict) -> dict:
-        answered = [(i, it) for i, it in enumerate(s["items"]) if it["response"]]
         return {
             "test_id": s["id"], "student_name": s["student_name"], "topic": s["topic"],
             "grade": s["grade"], "status": s["status"], "started_at": s["started_at"],
@@ -323,19 +359,7 @@ class AssessmentAgent:
             "time_limit_minutes": s["time_limit_minutes"], "session_time_used": round(session_time_used(s)),
             "reattempts": s["reattempts"],
             "assessment": s["assessment"], "narrative": s["narrative"],
-            "questions": [
-                {"number": i + 1, "idx": i, "visual": it.get("visual"),
-                 "mode": it["spec"]["mode"], "rationale": it["spec"]["rationale"],
-                 "difficulty": it["spec"]["difficulty"], "question_type": it["spec"]["question_type"],
-                 "dimension": it["spec"]["dimension"], "perspective": it["spec"]["perspective"],
-                 "focus": it["spec"]["primary"]["name"],
-                 "also": [c["name"] for c in it["spec"]["secondary"]],
-                 "question_text": it["item"]["question_text"], "choices": it["item"]["choices"],
-                 "correct_answer": it["item"]["correct_answer"],
-                 "solution_steps": it["item"]["solution_steps"], "concepts": it["item"]["concepts"],
-                 "time_limit_seconds": it["item"]["time_limit_seconds"], **it["response"]}
-                for i, it in answered
-            ],
+            "questions": self.answered_questions(s),
         }
 
     def history(self, name: str) -> list[dict]:

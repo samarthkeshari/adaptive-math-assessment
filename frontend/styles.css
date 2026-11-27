@@ -289,3 +289,9 @@ label.check input { width: auto; margin: 0; }
 .btn.danger { color: var(--bad); border-color: #f1c4c4; background: #fff; }
 .btn.danger:hover { background: var(--bad-bg); }
 .row-between > .actions { display: flex; gap: 8px; }
+
+/* ---- all questions & explanations ---- */
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 14px 0 4px; }
+.filters label { margin-bottom: 0; }
+.review-session h3 { font-size: 17px; }
+.review-session details.qa:first-of-type { margin-top: 12px; }

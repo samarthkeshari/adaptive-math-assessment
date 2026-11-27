@@ -527,6 +527,46 @@ def test_delete_session():
     assert replayed.sessions[bo]["proficiency"].snapshot() == mem().sessions[bo]["proficiency"].snapshot()
 
 
+def test_question_history():
+    data_dir = Path(tempfile.mkdtemp())
+    server.app.state.agent = AssessmentAgent(StubLLM(), Memory(data_dir))
+    with TestClient(server.app) as c:
+        def answer(tid, ok=True):
+            q = c.post(f"/api/tests/{tid}/next").json()["question"]
+            mc = q["answer_format"] == "multiple_choice"
+            c.post(f"/api/tests/{tid}/answer", json={"idx": q["idx"], "answer": ("A" if ok else "B") if mc else ("0.75" if ok else "5/6")})
+            return q
+
+        done = c.post("/api/tests", json={"student_name": "Ann", "topic": "Fractions", "grade": "5", "num_questions": 3}).json()["test_id"]
+        for ok in (True, False, True):
+            answer(done, ok)
+        c.post(f"/api/tests/{done}/finish")
+        c.post(f"/api/tests/{done}/items/0/visual")
+
+        live = c.post("/api/tests", json={"student_name": "Ann", "topic": "Decimals", "grade": "5",
+                                          "num_questions": 4, "reattempts": 1}).json()["test_id"]
+        answer(live, True)                                     # one finished question
+        q = c.post(f"/api/tests/{live}/next").json()["question"]
+        r = c.post(f"/api/tests/{live}/answer", json={"idx": q["idx"], "answer": "B" if q["answer_format"] == "multiple_choice" else "5/6"}).json()
+        assert r["retry"]                                      # second question is mid-retry
+
+        h = c.get("/api/students/ann/questions").json()
+        assert [x["test_id"] for x in h["sessions"]] == [live, done], "newest session first"
+        assert h["total_questions"] == 4
+        live_qs = h["sessions"][0]["questions"]
+        assert [x["number"] for x in live_qs] == [1], "open / mid-retry question is not revealed"
+        assert h["sessions"][0]["status"] == "in_progress" and h["sessions"][1]["status"] == "completed"
+        first = h["sessions"][1]["questions"][0]
+        for field in ("question_text", "correct_answer", "answer", "solution_steps", "concepts", "rationale", "attempts"):
+            assert field in first, field
+        assert first["visual"]["panels"], "saved picture explanation is included"
+        assert [x["is_correct"] for x in h["sessions"][1]["questions"]] == [True, False, True]
+
+        assert c.get("/api/students/nobody/questions").status_code == 404
+        c.delete(f"/api/tests/{done}")
+        assert [x["test_id"] for x in c.get("/api/students/ann/questions").json()["sessions"]] == [live]
+
+
 if __name__ == "__main__":
     test_llm_layer()
     test_anthropic_key_helper_and_fallback_retry()
@@ -536,4 +576,5 @@ if __name__ == "__main__":
     test_svg_sanitizer()
     test_reattempts()
     test_delete_session()
+    test_question_history()
     print("All offline tests passed.")

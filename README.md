@@ -200,6 +200,14 @@ Offline tests (stub LLM, no key needed), from the project root: `python3 -m back
      report are recalculated without it, and a saved coach summary is marked out of date.
      The student stays listed even if no sessions are left.
    - **Progress report**: the overall view across all sessions.
+   - **All questions & explanations**: every question answered in any session, grouped by
+     session (newest first). Each shows the question, the student's answer and earlier
+     tries, the correct answer, the worked solution, concepts, the misconception, why it was
+     asked, the report's diagnosis, and the picture explanation (generated on request).
+     You can filter by session, topic or result (correct, incorrect, timed out, needed
+     re-attempts) and search by text. Unfinished sessions have a **Review** button that opens
+     this screen for just that session. A question that's still open, or mid-retry, is never
+     shown, so its answer can't be seen early.
 3. **During a session**: **Save & exit** (or just closing the tab) pauses the question's
    timer, so the session can be continued later with the same time left.
 4. **Explain with a picture**: after answering, the student can ask for a pictorial
@@ -337,6 +345,7 @@ running.
 | `GET /api/topics?grade=5` | predefined topics for a grade (all grades if omitted) plus custom topics |
 | `GET /api/students` | saved students with completed / in-progress counts |
 | `GET /api/students/{name}/tests` | a student's sessions (in progress and completed) |
+| `GET /api/students/{name}/questions` | every answered question with answers, solutions and explanations, grouped by session |
 | `GET /api/students/{name}/progress` | the full progress report (plus the latest saved coach summary) |
 | `POST /api/students/{name}/progress/summary` | generate and save a new coach summary |
 | `POST /api/tests` | start a session `{student_name, topic, grade, num_questions, time_limit_minutes, reattempts}` (`time_limit_minutes: null` = no limit; `reattempts` 0–3) |

@@ -178,6 +178,7 @@ async function openStudent(name) {
       ? `${done.length} completed · ${open.length} in progress`
       : "New student. Start a first session below.";
     $("progress-btn").disabled = !tests.some((t) => t.answered > 0);
+    $("questions-btn").disabled = !tests.some((t) => t.answered > 0);
 
     $("continue-card").classList.toggle("hidden", !open.length);
     $("in-progress").replaceChildren(...open.map((t) => el("li", { onclick: () => resumeTest(t.id) },
@@ -190,6 +191,10 @@ async function openStudent(name) {
       el("span", { class: "actions" },
         el("span", { class: "small muted" }, `${t.answered}/${t.num_questions} answered`),
         el("button", { class: "btn small-btn primary", type: "button" }, "Continue"),
+        t.answered ? el("button", {
+          class: "btn small-btn", type: "button", title: "Answers and explanations so far",
+          onclick: (e) => { e.stopPropagation(); openReview(t.id); },
+        }, "Review") : null,
         deleteButton(t)))));
 
     $("completed-hint").textContent = done.length ? "" : "No completed sessions yet.";
@@ -647,45 +652,116 @@ function renderReport(d) {
   $("r-misc").textContent = n.misconception_insights || "No specific misconceptions detected.";
   $("r-timing").textContent = n.timing_insights;
 
-  const analysis = Object.fromEntries(n.question_analysis.map((x) => [x.question_number, x]));
-  $("r-questions").replaceChildren(...d.questions.map((q) => {
-    const x = analysis[q.number] || {};
-    const cls = q.timed_out ? "warn" : q.is_correct ? "good" : "bad";
-    const label = q.timed_out ? "Timed out" : q.is_correct ? "Correct" : "Incorrect";
-    const mc = q.choices && q.choices.length;
-    return el("details", { class: "qa" },
-      el("summary", {},
-        el("strong", {}, `Q${q.number}`),
-        el("span", { class: `badge ${cls}` }, label),
-        el("span", { class: "badge neutral" }, MODE_LABELS[q.mode] || q.mode),
-        el("span", { class: "badge neutral" }, `Level ${q.difficulty}`),
-        (q.attempt_count || 1) > 1 ? el("span", { class: "badge warn" }, `${q.attempt_count} tries`) : null,
-        el("span", { class: "badge neutral" }, q.question_type === "word" ? "Word" : "Direct"),
-        el("span", { class: "badge neutral" }, DIMENSION_LABELS[q.dimension]),
-        el("span", { class: "small muted" }, `${q.focus} · ${fmtTime(q.time_taken)} / ${fmtTime(q.time_limit_seconds)}`)),
-      el("div", { class: "qa-body" },
-        el("p", { class: "small muted" }, `Why asked: ${q.rationale}`),
-        el("p", {}, q.question_text),
-        mc ? el("p", { class: "small muted" }, q.choices.map((c, i) => `${LETTERS[i]}. ${c}`).join("   ")) : null,
-        el("p", {}, el("strong", {}, "Your answer: "),
-          q.answer ? (mc ? choiceLabel(q.choices, q.answer) : q.answer) : "(none)",
-          "   ", el("strong", {}, "Correct: "), mc ? choiceLabel(q.choices, q.correct_answer) : q.correct_answer),
-        (q.attempts || []).length > 1 ? el("p", {}, el("strong", {}, "Earlier tries: "),
-          q.attempts.slice(0, -1).map((t) => `${mc ? choiceLabel(q.choices, t.answer) : t.answer}`
-            + (t.misconception ? ` (${t.misconception})` : "")).join("; ")) : null,
-        q.misconception ? el("p", {}, el("strong", {}, "Misconception: "), q.misconception) : null,
-        el("p", {}, el("strong", {}, "Fundamental concepts: "), (x.fundamental_concepts || q.concepts.map((c) => c.name)).join(", ")),
-        x.how_concepts_connect ? el("p", {}, el("strong", {}, "How they connect: "), x.how_concepts_connect) : null,
-        x.diagnosis ? el("p", {}, el("strong", {}, "Diagnosis: "), x.diagnosis) : null,
-        el("p", {}, el("strong", {}, "Solution:")),
-        el("ol", { class: "steps" }, q.solution_steps.map((st) => el("li", {}, st))),
-        reportVisual(d.test_id, q)));
-  }));
+  $("r-questions").replaceChildren(...d.questions.map((q) => questionCard(d.test_id, q)));
 
   fillList("r-strengths", n.strengths);
   fillList("r-improve", n.areas_to_improve);
   fillList("r-next", n.recommended_next_steps);
   show("report");
+}
+
+// One answered question with its answers, explanations and picture (report + review screens).
+function questionCard(testId, q, { open = false } = {}) {
+  const x = q.analysis || {};
+  const cls = q.timed_out ? "warn" : q.is_correct ? "good" : "bad";
+  const label = q.timed_out ? "Timed out" : q.is_correct ? "Correct" : "Incorrect";
+  const mc = q.choices && q.choices.length;
+  const card = el("details", { class: "qa" },
+    el("summary", {},
+      el("strong", {}, `Q${q.number}`),
+      el("span", { class: `badge ${cls}` }, label),
+      el("span", { class: "badge neutral" }, MODE_LABELS[q.mode] || q.mode),
+      el("span", { class: "badge neutral" }, `Level ${q.difficulty}`),
+      (q.attempt_count || 1) > 1 ? el("span", { class: "badge warn" }, `${q.attempt_count} tries`) : null,
+      el("span", { class: "badge neutral" }, q.question_type === "word" ? "Word" : "Direct"),
+      el("span", { class: "badge neutral" }, DIMENSION_LABELS[q.dimension]),
+      el("span", { class: "small muted" }, `${q.focus} · ${fmtTime(q.time_taken)} / ${fmtTime(q.time_limit_seconds)}`)),
+    el("div", { class: "qa-body" },
+      el("p", { class: "small muted" }, `Why asked: ${q.rationale}`),
+      el("p", {}, q.question_text),
+      mc ? el("p", { class: "small muted" }, q.choices.map((c, i) => `${LETTERS[i]}. ${c}`).join("   ")) : null,
+      el("p", {}, el("strong", {}, "Your answer: "),
+        q.answer ? (mc ? choiceLabel(q.choices, q.answer) : q.answer) : "(none)",
+        "   ", el("strong", {}, "Correct: "), mc ? choiceLabel(q.choices, q.correct_answer) : q.correct_answer),
+      (q.attempts || []).length > 1 ? el("p", {}, el("strong", {}, "Earlier tries: "),
+        q.attempts.slice(0, -1).map((t) => `${mc ? choiceLabel(q.choices, t.answer) : t.answer}`
+          + (t.misconception ? ` (${t.misconception})` : "")).join("; ")) : null,
+      q.misconception ? el("p", {}, el("strong", {}, "Misconception: "), q.misconception) : null,
+      el("p", {}, el("strong", {}, "Fundamental concepts: "), (x.fundamental_concepts || q.concepts.map((c) => c.name)).join(", ")),
+      x.how_concepts_connect ? el("p", {}, el("strong", {}, "How they connect: "), x.how_concepts_connect) : null,
+      x.diagnosis ? el("p", {}, el("strong", {}, "Diagnosis: "), x.diagnosis) : null,
+      el("p", {}, el("strong", {}, "Solution:")),
+      el("ol", { class: "steps" }, q.solution_steps.map((st) => el("li", {}, st))),
+      reportVisual(testId, q)));
+  card.open = open;
+  return card;
+}
+
+// ---------------------------------------------------------------- all questions & explanations
+async function openReview(sessionId = "") {
+  loading("Loading questions and explanations…");
+  try {
+    state.review = await api(`/api/students/${enc(state.student)}/questions`);
+    const r = state.review;
+    $("rv-title").textContent = `${r.student_name}: all questions & explanations`;
+    $("rv-sub").textContent = `${r.total_questions} answered question${r.total_questions === 1 ? "" : "s"} `
+      + `across ${r.sessions.length} session${r.sessions.length === 1 ? "" : "s"}. `
+      + "Questions still open in an unfinished session are not shown.";
+    $("rv-session").replaceChildren(el("option", { value: "" }, "All sessions"),
+      ...r.sessions.map((s) => el("option", { value: s.test_id },
+        `${s.topic} · grade ${s.grade} · ${fmtDay(s.started_at)}${s.status === "in_progress" ? " (unfinished)" : ""}`)));
+    const topics = [...new Set(r.sessions.map((s) => s.topic))].sort();
+    $("rv-topic").replaceChildren(el("option", { value: "" }, "All topics"), ...topics.map((t) => el("option", { value: t }, t)));
+    $("rv-session").value = sessionId;
+    $("rv-topic").value = "";
+    $("rv-result").value = "";
+    $("rv-search").value = "";
+    renderReview();
+    show("review");
+  } catch (e) {
+    showError(e.message);
+    openStudent(state.student);
+  }
+}
+
+function reviewMatches(q, result, needle) {
+  if (result === "correct" && !(q.is_correct && !q.timed_out)) return false;
+  if (result === "incorrect" && (q.is_correct || q.timed_out)) return false;
+  if (result === "timed_out" && !q.timed_out) return false;
+  if (result === "retried" && !((q.attempt_count || 1) > 1)) return false;
+  if (!needle) return true;
+  const hay = [q.question_text, q.focus, ...q.also, ...q.concepts.map((c) => c.name), q.misconception || ""]
+    .join(" ").toLowerCase();
+  return hay.includes(needle);
+}
+
+function renderReview() {
+  const { sessions } = state.review;
+  const sid = $("rv-session").value, topic = $("rv-topic").value, result = $("rv-result").value;
+  const needle = $("rv-search").value.trim().toLowerCase();
+  let shown = 0;
+  const blocks = sessions
+    .filter((s) => (!sid || s.test_id === sid) && (!topic || s.topic === topic))
+    .map((s) => {
+      const qs = s.questions.filter((q) => reviewMatches(q, result, needle));
+      if (!qs.length) return null;
+      shown += qs.length;
+      const correct = s.questions.filter((q) => q.is_correct && !q.timed_out).length;
+      return el("div", { class: "card review-session" },
+        el("div", { class: "row-between" },
+          el("div", {},
+            el("h3", { class: "mt0" }, `${s.topic} · grade ${s.grade}`),
+            el("div", { class: "small muted" }, `${fmtDate(s.started_at)} · ${correct}/${s.questions.length} correct`
+              + (s.status === "in_progress" ? ` · unfinished (${s.questions.length}/${s.num_questions} answered)` : ""))),
+          s.status === "completed"
+            ? el("button", { class: "btn small-btn", type: "button", onclick: () => openReport(s.test_id) }, "Session report")
+            : el("button", { class: "btn small-btn primary", type: "button", onclick: () => resumeTest(s.test_id) }, "Continue")),
+        ...qs.map((q) => questionCard(s.test_id, q, { open: !!sid })));
+    })
+    .filter(Boolean);
+  $("rv-list").replaceChildren(...(blocks.length ? blocks
+    : [el("div", { class: "card muted" }, sessions.length ? "No questions match these filters." : "No answered questions yet.")]));
+  $("rv-count").textContent = `Showing ${shown} question${shown === 1 ? "" : "s"}`;
 }
 
 // ---------------------------------------------------------------- holistic progress report
@@ -917,6 +993,12 @@ $("nav-dashboard").addEventListener("click", () => openStudent(state.student));
 $("r-back").addEventListener("click", () => openStudent(state.student));
 $("pg-back").addEventListener("click", () => openStudent(state.student));
 $("progress-btn").addEventListener("click", openProgress);
+$("questions-btn").addEventListener("click", () => openReview());
+$("rv-back").addEventListener("click", () => openStudent(state.student));
+["rv-session", "rv-topic", "rv-result"].forEach((id) => $(id).addEventListener("change", renderReview));
+$("rv-search").addEventListener("input", renderReview);
+$("rv-expand").addEventListener("click", () => document.querySelectorAll("#rv-list details.qa").forEach((d) => { d.open = true; }));
+$("rv-collapse").addEventListener("click", () => document.querySelectorAll("#rv-list details.qa").forEach((d) => { d.open = false; }));
 $("pg-summary-btn").addEventListener("click", generateCoachSummary);
 
 api("/api/config").then((c) => {
