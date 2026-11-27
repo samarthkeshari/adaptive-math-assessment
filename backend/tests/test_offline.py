@@ -35,17 +35,46 @@ CONCEPT_MAP = {
 }
 
 
+SEED_ANALYSIS = {
+    "readable": True, "problem": "",
+    "question_text": "Maya has 3/4 of a pizza and eats 1/3 of a whole pizza. How much is left?",
+    "topic": "Subtracting fractions with unlike denominators", "suggested_grade": "5",
+    "topic_summary": "Subtracting unlike fractions in context.",
+    "primary_concept": "Subtracting unlike fractions",
+    "concepts": [
+        {"name": "Fraction meaning", "area": "Number & Operations", "description": "parts of a whole",
+         "prerequisites": [], "in_question": False},
+        {"name": "Equivalent fractions", "area": "Number & Operations", "description": "same value",
+         "prerequisites": ["Fraction meaning"], "in_question": True},
+        {"name": "Subtracting unlike fractions", "area": "Number & Operations", "description": "common denominators",
+         "prerequisites": ["Equivalent fractions"], "in_question": True},
+    ],
+    "connected_areas": [{"name": "Measurement", "area": "Measurement", "connection": "lengths"}],
+    "structure": {"problem_type": "word", "answer_format": "short_answer", "steps": 3,
+                  "representation": "none", "context": "food sharing",
+                  "pattern": "a quantity, a part removed, find what remains",
+                  "solution_strategy": "rename with a common denominator, subtract"},
+    "difficulty": 6, "answer": "5/12", "solution_steps": ["9/12 - 4/12 = 5/12"],
+}
+
+
 class StubLLM(LLMProvider):
     name = "stub"
 
     def __init__(self):
         super().__init__("stub-model")
         self.calls = []
+        self.prompts = []
 
-    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens):
+    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens, attachments=None):
+        self.last_attachments = attachments
+        self.prompts.append(prompt)
         props = schema["properties"]
         self.calls.append(next(iter(props)))
-        if "connected_areas" in props:
+        if "readable" in props:  # question analysis (seeded sessions)
+            out = dict(SEED_ANALYSIS, readable="garbage" not in prompt,
+                       problem="" if "garbage" not in prompt else "No math question found.")
+        elif "connected_areas" in props:
             out = CONCEPT_MAP
         elif "choice_diagnostics" in props:
             ids = props["choice_diagnostics"]["items"]["properties"]["concept_id"]["enum"]
@@ -623,6 +652,65 @@ def test_timer_modes():
     assert replayed.sessions[off]["timer_mode"] == "off"
 
 
+def test_seed_question_sessions():
+    from backend.engine import question_analyzer
+    data_dir = Path(tempfile.mkdtemp())
+    llm = StubLLM()
+    server.app.state.agent = AssessmentAgent(llm, Memory(data_dir))
+    import base64 as b64
+    png = b64.b64encode(b"\x89PNG fake image bytes").decode()
+    txt = b64.b64encode("What is 3/4 - 1/3?".encode()).decode()
+    with TestClient(server.app) as c:
+        analyze = lambda **kw: c.post("/api/questions/analyze", json={"grade": "5", **kw})
+
+        # Reading the question: typed, image, text file; errors.
+        a = analyze(question_text=SEED_ANALYSIS["question_text"]).json()
+        assert a["topic"].startswith("Subtracting") and a["source"]["kind"] == "text" and llm.last_attachments is None
+        img = analyze(attachment={"name": "q.png", "media_type": "image/png", "data": png}).json()
+        assert img["source"] == {"kind": "image", "file_name": "q.png"}
+        assert llm.last_attachments == [{"media_type": "image/png", "data": png}]
+        f = analyze(attachment={"name": "q.txt", "media_type": "text/plain", "data": txt}).json()
+        assert f["source"]["kind"] == "file" and "What is 3/4 - 1/3?" in llm.prompts[-1]
+        assert analyze().status_code == 422
+        assert analyze(question_text="garbage").json()["detail"] == "No math question found."
+        assert analyze(attachment={"name": "x.exe", "media_type": "application/octet-stream", "data": png}).status_code == 422
+        assert analyze(attachment={"name": "x.png", "media_type": "image/png", "data": "%%%not-base64"}).status_code == 422
+        saved = question_analyzer.MAX_UPLOAD_BYTES
+        question_analyzer.MAX_UPLOAD_BYTES = 5
+        assert "10 MB" in analyze(attachment={"name": "q.png", "media_type": "image/png", "data": png}).json()["detail"]
+        question_analyzer.MAX_UPLOAD_BYTES = saved
+
+        # Starting a seeded session.
+        assert c.post("/api/tests", json={"student_name": "Ann", "grade": "5", "num_questions": 3}).status_code == 422
+        bad = dict(a, concepts=[])
+        assert c.post("/api/tests", json={"student_name": "Ann", "grade": "5", "num_questions": 3, "seed": bad}).status_code == 422
+        tid = c.post("/api/tests", json={"student_name": "Ann", "grade": "5", "num_questions": 4, "seed": a}).json()["test_id"]
+        s = server.app.state.agent.memory.sessions[tid]
+        assert s["topic"] == a["topic"] and s["seed"]["primary_concept_id"] == "subtracting-unlike-fractions"
+        assert s["concept_map_key"].startswith("seed-") and "file" not in json.dumps(s["seed"]["source"]).replace("file_name", "")
+        assert server.app.state.agent.memory.custom_topics == [], "seed topics don't pollute the topic list"
+
+        q1 = c.post(f"/api/tests/{tid}/next").json()["question"]
+        spec = s["items"][0]["spec"]
+        assert spec["mode"] == "mirror" and spec["difficulty"] == 6 and q1["question_type"] == "word"
+        assert spec["primary"]["id"] == "subtracting-unlike-fractions" and spec["dimension"] == "multi_concept"
+        assert "MODEL QUESTION" in llm.prompts[-1] and "close parallel" in llm.prompts[-1]
+        c.post(f"/api/tests/{tid}/answer", json={"idx": 0, "answer": "0.75" if q1["answer_format"] == "short_answer" else "A"})
+        for i in range(1, 4):
+            q = c.post(f"/api/tests/{tid}/next").json()["question"]
+            assert q["question_type"] == "word", "structure of the user's question is kept"
+            assert "MODEL QUESTION" in llm.prompts[-1] and "close parallel" not in llm.prompts[-1]
+            c.post(f"/api/tests/{tid}/answer", json={"idx": i, "answer": "A" if q["answer_format"] == "multiple_choice" else "0.75"})
+        d = c.post(f"/api/tests/{tid}/finish").json()
+        assert d["seed"]["question_text"] == a["question_text"] and d["questions"][0]["mode"] == "mirror"
+        assert "user's own question" in llm.prompts[-1], "narrative relates findings to the question"
+        hist = c.get("/api/students/Ann/tests").json()["tests"]
+        assert hist[0]["from_question"] is True
+        assert c.get("/api/students/Ann/questions").json()["sessions"][0]["seed_question"] == a["question_text"]
+
+    assert Memory(data_dir).sessions[tid]["seed"]["question_text"] == a["question_text"]
+
+
 if __name__ == "__main__":
     test_llm_layer()
     test_anthropic_key_helper_and_fallback_retry()
@@ -634,4 +722,5 @@ if __name__ == "__main__":
     test_delete_session()
     test_question_history()
     test_timer_modes()
+    test_seed_question_sessions()
     print("All offline tests passed.")

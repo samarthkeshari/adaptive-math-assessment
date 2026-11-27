@@ -74,7 +74,12 @@ Student grade: {grade}
    with this topic in multi-concept problems (e.g. fractions + area of rectangles), with
    the connection explained."""
     raw = await llm.generate_json(SYSTEM, prompt, CONCEPT_MAP_SCHEMA, effort="medium", max_tokens=16000)
+    return normalize_concept_map(raw, topic, grade, map_key(topic, grade), llm.describe())
 
+
+def normalize_concept_map(raw: dict, topic: str, grade: str, key: str, llm_info: dict) -> dict:
+    """Turn LLM output ({topic_summary, concepts, connected_areas}) into a concept map with
+    stable slug ids, resolved prerequisites, and cross-area concepts marked external."""
     concepts, by_name = [], {}
     for c in raw["concepts"]:
         cid = slugify(c["name"])
@@ -102,13 +107,13 @@ Student grade: {grade}
                          "external": True})
 
     return {
-        "key": map_key(topic, grade),
+        "key": key,
         "topic": topic,
         "grade": grade,
         "summary": raw["topic_summary"],
         "concepts": concepts,
         "created_at": time.time(),
-        "llm": llm.describe(),
+        "llm": llm_info,
     }
 
 

@@ -37,9 +37,12 @@ def _public(c: dict) -> dict:
 
 
 def select_next(cmap: dict, prof: ProficiencyModel, items: list[dict],
-                memory_gaps: dict[str, list[str]]) -> dict:
-    """memory_gaps: concept_id -> misconceptions recorded for this student in earlier tests."""
+                memory_gaps: dict[str, list[str]], seed: dict | None = None) -> dict:
+    """memory_gaps: concept_id -> misconceptions recorded for this student in earlier tests.
+    seed: for sessions built from the user's own question (see question_analyzer)."""
     core = core_concepts(cmap)
+    if seed and not items:
+        return _mirror_spec(cmap, prof, seed)
     order = {c["id"]: i for i, c in enumerate(core)}
     last_primary = items[-1]["spec"]["primary"]["id"] if items else None
     suspected = {
@@ -99,6 +102,8 @@ def select_next(cmap: dict, prof: ProficiencyModel, items: list[dict],
         if mode in ("explore", "confirm", "stretch") and ancestors(cid) & suspected:
             score -= 1.5  # don't build on a foundation that currently looks shaky
         score += 0.3 / (1.0 + est.evidence)
+        if seed and cid in seed["question_concept_ids"]:
+            score += 0.4  # stay close to the concepts the user's question actually uses
         if best is None or score > best[0]:
             best = (score, c, mode, why)
 
@@ -168,6 +173,12 @@ def select_next(cmap: dict, prof: ProficiencyModel, items: list[dict],
     answer_format = ("multiple_choice"
                      if mode == "probe" or n_mc < (len(items) + 1) / 3 else "short_answer")
 
+    if seed:
+        # Keep the structure of the user's question; probes may still use diagnostic choices.
+        question_type = seed["structure"]["problem_type"]
+        if seed["structure"]["answer_format"] == "multiple_choice":
+            answer_format = "multiple_choice"
+
     return {
         "mode": mode,
         "rationale": rationale,
@@ -179,4 +190,25 @@ def select_next(cmap: dict, prof: ProficiencyModel, items: list[dict],
         "perspective": perspective,
         "answer_format": answer_format,
         "theta_before": round(theta, 2),
+    }
+
+
+def _mirror_spec(cmap: dict, prof: ProficiencyModel, seed: dict) -> dict:
+    """First item of a seeded session: a close parallel of the user's question."""
+    by_id = {c["id"]: c for c in cmap["concepts"]}
+    primary = by_id.get(seed["primary_concept_id"]) or core_concepts(cmap)[-1]
+    others = [by_id[c] for c in seed["question_concept_ids"] if c in by_id and c != primary["id"]]
+    structure = seed["structure"]
+    return {
+        "mode": "mirror",
+        "rationale": "Starting with a problem built like your question, to see how it goes "
+                     "before adapting.",
+        "primary": _public(primary),
+        "secondary": [_public(c) for c in others[:1]],
+        "difficulty": clamp_difficulty(seed["difficulty"]),
+        "dimension": "multi_concept" if others else "direct_concept",
+        "question_type": structure["problem_type"],
+        "perspective": "application" if structure["problem_type"] == "word" else "procedural",
+        "answer_format": structure["answer_format"],
+        "theta_before": round(prof.theta_for(primary["id"]), 2),
     }

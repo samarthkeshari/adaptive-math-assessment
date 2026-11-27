@@ -175,6 +175,16 @@ Offline tests (stub LLM, no key needed), from the project root: `python3 -m back
    - **Continue where you left off**: sessions that aren't finished, showing how many
      questions are answered. Continue picks up at the same question.
    - **Start a new session**:
+     - **Questions from: my own question**: type or paste a question, or upload a photo,
+       PDF or `.txt` file of one (up to 10 MB), and click **Read my question**. Claude
+       transcribes and solves it, and shows a preview: what it read, the topic, the concepts
+       (★ = used in the question, others = foundations it builds on), its structure (word or
+       direct, answer format, steps, representation, context) and its difficulty. If anything
+       is misread, edit the text and read it again. The session then opens with a close
+       parallel of the question ("Like your question"), and adapts on those concepts with
+       problems built the same way (new numbers and contexts). The report shows "Based on
+       your question". Only the transcription and analysis are saved, not the uploaded file.
+       Photos and PDFs need Claude; OpenAI-compatible providers can read images but not PDFs.
      - **Topic:** pick from the predefined K–12 list, which shows the topics for the selected
        grade grouped by strand (tick *Show topics for all grades* to see everything). Or choose
        **➕ Add a new topic…** and type any topic. New topics are saved to
@@ -356,6 +366,7 @@ running.
 | `GET /api/students/{name}/questions` | every answered question with answers, solutions and explanations, grouped by session |
 | `GET /api/students/{name}/progress` | the full progress report (plus the latest saved coach summary) |
 | `POST /api/students/{name}/progress/summary` | generate and save a new coach summary |
+| `POST /api/questions/analyze` | read a question `{grade, question_text, attachment: {name, media_type, data(base64)}}` and return its transcription, concepts, structure and difficulty |
 | `POST /api/tests` | start a session `{student_name, topic, grade, num_questions, time_limit_minutes, reattempts, timer_mode, seconds_per_question}` (`time_limit_minutes: null` = no limit; `reattempts` 0–3; `timer_mode` `auto` / `fixed` (needs `seconds_per_question` 30–600) / `off` (no session limit allowed)) |
 | `POST /api/tests/{id}/next` | the open question (resumes its timer) or the next adaptive one |
 | `POST /api/tests/{id}/answer` | submit `{idx, answer}`. Returns `{retry: true, attempts_left, note, hint, question}` while tries remain, else the full feedback plus what the agent learned |
@@ -384,6 +395,7 @@ backend/                      Python package: run with `uvicorn backend.main:app
     assessment.py             concept-level session assessment and narrative
     progress.py               overall progress report and coach summary
     visualizer.py             pictorial explanations (LLM-drawn SVG, sanitized)
+    question_analyzer.py      reads a user's question (text, image, PDF) for "my own question" sessions
     topics.py                 predefined K–12 topic list by strand and grade range
   llm/                        provider interface, Anthropic adapter, OpenAI-compatible adapter
   storage/memory.py           per-student JSONL storage and performance memory

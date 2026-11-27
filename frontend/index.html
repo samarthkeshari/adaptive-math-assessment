@@ -65,14 +65,33 @@
               <option>9</option><option>10</option><option>11</option><option>12</option>
             </select>
           </label>
-          <label>Math topic
-            <select id="topic-select" required></select>
-          </label>
-          <label class="check"><input type="checkbox" id="all-grades" /> Show topics for all grades</label>
-          <label id="new-topic-wrap" class="hidden">New topic
-            <input id="new-topic" maxlength="120" placeholder="e.g. Tessellations, Number bases, Tips and taxes" autocomplete="off" />
-            <span class="muted small">It will be saved and offered in the list next time.</span>
-          </label>
+          <div class="source-switch" role="radiogroup" aria-label="Questions from">
+            <span class="small muted">Questions from:</span>
+            <label class="check"><input type="radio" name="source" value="topic" checked /> a topic</label>
+            <label class="check"><input type="radio" name="source" value="seed" /> my own question</label>
+          </div>
+          <div id="topic-fields">
+            <label>Math topic
+              <select id="topic-select" required></select>
+            </label>
+            <label class="check"><input type="checkbox" id="all-grades" /> Show topics for all grades</label>
+            <label id="new-topic-wrap" class="hidden">New topic
+              <input id="new-topic" maxlength="120" placeholder="e.g. Tessellations, Number bases, Tips and taxes" autocomplete="off" />
+              <span class="muted small">It will be saved and offered in the list next time.</span>
+            </label>
+          </div>
+          <div id="seed-fields" class="hidden">
+            <label>Your question
+              <textarea id="seed-text" rows="4" maxlength="5000" placeholder="Type or paste a math question, e.g. from homework"></textarea>
+            </label>
+            <label>…or upload a photo, PDF or text file of it
+              <input type="file" id="seed-file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.txt" />
+            </label>
+            <button type="button" class="btn" id="seed-read-btn">Read my question</button>
+            <p class="muted small">The assessment tests the same concepts with problems built like this one,
+              adapting as the student answers.</p>
+            <div id="seed-preview" class="seed-preview hidden" aria-live="polite"></div>
+          </div>
           <div class="form-row">
             <label>Number of questions
               <select id="num-questions">
@@ -237,6 +256,7 @@
           <div>
             <h2 id="r-title"></h2>
             <p class="muted" id="r-sub"></p>
+            <div id="r-seed"></div>
           </div>
           <div class="actions">
             <button class="btn danger" id="r-delete">Delete session</button>

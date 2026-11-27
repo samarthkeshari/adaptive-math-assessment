@@ -14,7 +14,7 @@ from collections import defaultdict
 from backend.llm import LLMError, LLMProvider
 from backend.storage.memory import Memory, session_time_left, session_time_used, student_key, time_used
 
-from . import assessment, grader, item_writer, progress, selector, topics, visualizer
+from . import assessment, grader, item_writer, progress, question_analyzer, selector, topics, visualizer
 from .concept_map import build_concept_map, map_key
 from .proficiency import outcome_value, response_weights
 
@@ -48,24 +48,46 @@ class AssessmentAgent:
         return s
 
     # ------------------------------------------------------------------ start
+    async def analyze_question(self, grade: str, question_text: str, attachment: dict | None) -> dict:
+        """Read a user-supplied question (typed or uploaded) for a seeded session."""
+        try:
+            return await self._llm_call(
+                question_analyzer.analyze_question(self.llm, grade, question_text, attachment))
+        except question_analyzer.UploadError as e:
+            raise AgentError(str(e), 422) from e
+
     async def start(self, student_name: str, topic: str, grade: str, num_questions: int,
                     time_limit_minutes: int | None = None, reattempts: int = 0,
-                    timer_mode: str = "auto", seconds_per_question: int | None = None) -> str:
+                    timer_mode: str = "auto", seconds_per_question: int | None = None,
+                    seed: dict | None = None) -> str:
         """timer_mode: "auto" (AI picks each question's time), "fixed" (seconds_per_question
-        for every question) or "off" (untimed: no per-question limit, no session limit)."""
+        for every question) or "off" (untimed: no per-question limit, no session limit).
+        seed: a confirmed analysis of the user's own question; the session then tests its
+        concepts with problems of the same structure (topic is taken from the analysis)."""
         if timer_mode == "off":
             time_limit_minutes = None
         if timer_mode != "fixed":
             seconds_per_question = None
-        key = map_key(topic, grade)
-        async with self._locks[f"map:{key}"]:
-            cmap = self.memory.concept_maps.get(key)
-            if cmap is None:
-                cmap = await self._llm_call(build_concept_map(self.llm, topic, grade))
+        seed_info = None
+        if seed:
+            try:
+                question_analyzer.check_seed(seed)
+            except ValueError as e:
+                raise AgentError(str(e), 422) from e
+            cmap = question_analyzer.seed_concept_map(seed, grade, self.llm.describe())
+            key, topic = cmap["key"], seed["topic"]
+            if key not in self.memory.concept_maps:
                 await self.memory.save_concept_map(cmap)
-
-        if not topics.is_predefined(topic):
-            await self.memory.add_custom_topic(topic, grade, student_name)
+            seed_info = question_analyzer.seed_summary(seed, cmap)
+        else:
+            key = map_key(topic, grade)
+            async with self._locks[f"map:{key}"]:
+                cmap = self.memory.concept_maps.get(key)
+                if cmap is None:
+                    cmap = await self._llm_call(build_concept_map(self.llm, topic, grade))
+                    await self.memory.save_concept_map(cmap)
+            if not topics.is_predefined(topic):
+                await self.memory.add_custom_topic(topic, grade, student_name)
         skey = student_key(student_name)
         prior, prior_overall = self.memory.priors_for(skey, cmap)
         session_id = uuid.uuid4().hex[:12]
@@ -76,7 +98,7 @@ class AssessmentAgent:
             "reattempts": reattempts, "timer_mode": timer_mode,
             "seconds_per_question": seconds_per_question,
             "concept_map_key": key, "llm": self.llm.describe(),
-            "prior": prior, "prior_overall": prior_overall,
+            "prior": prior, "prior_overall": prior_overall, "seed": seed_info,
         })
         return session_id
 
@@ -100,12 +122,12 @@ class AssessmentAgent:
 
             cmap = self.memory.concept_maps[s["concept_map_key"]]
             remembered = self.memory.remembered_misconceptions(s["student_key"])
-            spec = selector.select_next(cmap, s["proficiency"], items, remembered)
+            spec = selector.select_next(cmap, s["proficiency"], items, remembered, s["seed"])
             pid = spec["primary"]["id"]
             known = list(dict.fromkeys(
                 list(s["proficiency"].get(pid).misconceptions) + remembered.get(pid, [])))
             item = await self._llm_call(
-                item_writer.write_item(self.llm, s["topic"], s["grade"], spec, items, known))
+                item_writer.write_item(self.llm, s["topic"], s["grade"], spec, items, known, s["seed"]))
             # Session timing choice overrides the AI's suggested limit (kept for reference).
             item["suggested_time_limit_seconds"] = item["time_limit_seconds"]
             if s["timer_mode"] == "fixed":
@@ -318,7 +340,7 @@ class AssessmentAgent:
             "started_at": s["started_at"], "finished_at": s["finished_at"],
             "num_questions": s["num_questions"], "time_limit_minutes": s["time_limit_minutes"],
             "reattempts": s["reattempts"], "timer_mode": s["timer_mode"],
-            "seconds_per_question": s["seconds_per_question"],
+            "seconds_per_question": s["seconds_per_question"], "seed": s["seed"],
             "session_time_used": round(session_time_used(s)),
             "concept_map_key": s["concept_map_key"], "prior": s["prior"],
             "items": [
@@ -364,6 +386,7 @@ class AssessmentAgent:
                     "test_id": s["id"], "topic": s["topic"], "grade": s["grade"],
                     "status": s["status"], "started_at": s["started_at"],
                     "finished_at": s["finished_at"], "num_questions": s["num_questions"],
+                    "seed_question": (s["seed"] or {}).get("question_text"),
                     "questions": questions,
                 })
         return {"student_name": self.memory.students[key]["name"], "sessions": sessions,
@@ -376,7 +399,7 @@ class AssessmentAgent:
             "finished_at": s["finished_at"], "num_questions": s["num_questions"], "llm": s["llm"],
             "time_limit_minutes": s["time_limit_minutes"], "session_time_used": round(session_time_used(s)),
             "reattempts": s["reattempts"], "timer_mode": s["timer_mode"],
-            "seconds_per_question": s["seconds_per_question"],
+            "seconds_per_question": s["seconds_per_question"], "seed": s["seed"],
             "assessment": s["assessment"], "narrative": s["narrative"],
             "questions": self.answered_questions(s),
         }
@@ -388,6 +411,7 @@ class AssessmentAgent:
              "finished_at": s["finished_at"], "num_questions": s["num_questions"],
              "time_limit_minutes": s["time_limit_minutes"], "timer_mode": s["timer_mode"],
              "seconds_per_question": s["seconds_per_question"],
+             "from_question": bool(s["seed"]),
              "session_time_left": (round(max(0, session_time_left(s)))
                                    if s["time_limit_minutes"] else None),
              "answered": sum(1 for it in s["items"] if it["response"]),

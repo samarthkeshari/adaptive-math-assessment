@@ -286,6 +286,32 @@ untimed items in timing ratios, and the narrative prints "(untimed)". `off` forc
 `POST /pause` (`item_paused`). The UI hides the problem until **Resume**, which calls `/next`
 and gets the same item back via `item_resumed`, with the remaining time.
 
+### 4.4c Sessions from the user's own question (`backend/engine/question_analyzer.py`)
+1. **Analyze** (`POST /api/questions/analyze`): the upload is validated (≤ 10 MB; images and
+   PDF go to the model as attachments, `.txt` is decoded into the prompt). One structured call
+   returns the transcription, topic, suggested grade, 4–8 concepts with prerequisites and an
+   `in_question` flag, connected areas, the **structure** (problem type, answer format, steps,
+   representation, context, pattern, strategy), difficulty, answer and solution. User
+   problems raise `UploadError` → 422; it's deliberately not a `ValueError`, which the agent
+   maps to "unusable model output" (502).
+2. **Confirm**: the UI shows the analysis. Edits to the text or file, or a grade change,
+   invalidate it.
+3. **Start** (`POST /api/tests` with `seed`): the server re-validates the analysis against the
+   schema and builds the concept map from it (`normalize_concept_map`, key
+   `seed-<sha1(grade|text)>`, no extra call). The session stores a **seed summary**
+   (question text, structure, difficulty, primary and in-question concept ids, answer,
+   source kind and file name; never the file).
+4. **Adapt**: item 1 is `mode = mirror` (primary concept + one in-question concept, the seed's
+   difficulty, type and format). Later items use the normal policy with +0.4 for in-question
+   concepts, the seed's problem type, and multiple choice when the seed was multiple choice.
+   The item writer gets a MODEL QUESTION block (mirror the structure with new numbers and
+   context; a close parallel for the opening item). The narrative relates findings to the
+   question.
+
+The LLM layer accepts `attachments` (`[{media_type, data}]`): Anthropic sends
+`image`/`document` blocks before the text, and OpenAI-compatible providers send `image_url`
+data URIs (PDF → a clear error).
+
 ### 4.5 Timing (`backend/storage/memory.py`, `backend/engine/agent.py`)
 - Item time used = `elapsed + (now − active_since if running)`.
 - Session time used = Σ over items (`time_taken` if answered, else live time used).

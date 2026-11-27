@@ -87,7 +87,7 @@ def item_schema(concept_ids: list[str]) -> dict:
 
 
 async def write_item(llm: LLMProvider, topic: str, grade: str, spec: dict, items: list[dict],
-                     known_misconceptions: list[str]) -> dict:
+                     known_misconceptions: list[str], seed: dict | None = None) -> dict:
     p, secondary = spec["primary"], spec["secondary"]
     if spec["dimension"] == "direct_concept":
         dim_text = (f"DIRECT CONCEPT: test '{p['name']}' on its own, in isolation, so a wrong "
@@ -132,6 +132,21 @@ so it reveals whether these are still present):
 
 Questions already asked in this test (do not repeat them or their numbers/contexts):
 {prior}"""
+    if seed:
+        st = seed["structure"]
+        prompt += f"""
+
+MODEL QUESTION (the user's own question; this whole session is built around it):
+{seed['question_text']}
+
+Mirror its STRUCTURE while following the item design above: {st['problem_type']} problem,
+{st['answer_format'].replace('_', ' ')}, about {st['steps']} solution step(s), representation:
+{st['representation']}; context style: {st['context']}; pattern: {st['pattern']}.
+Use new numbers and a new specific context so it is a fresh problem, never a copy."""
+        if spec["mode"] == "mirror":
+            prompt += """
+This is the opening item: write a close parallel of the model question that tests the same
+concepts at the same difficulty, changing only the numbers and the specific context."""
 
     ids = [p["id"], *[s["id"] for s in secondary]]
     item = await llm.generate_json(SYSTEM, prompt, item_schema(ids), effort="medium", max_tokens=16000)

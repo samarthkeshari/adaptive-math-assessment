@@ -199,6 +199,7 @@ class Memory:
                 "reattempts": e.get("reattempts", 0),
                 "timer_mode": e.get("timer_mode", "auto"),
                 "seconds_per_question": e.get("seconds_per_question"),
+                "seed": e.get("seed"),
                 "llm": e["llm"], "started_at": e["ts"], "last_activity": e["ts"],
                 "status": "in_progress", "items": [], "prior": e["prior"],
                 "proficiency": ProficiencyModel(e["prior"], e["prior_overall"]),

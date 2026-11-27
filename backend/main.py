@@ -48,7 +48,7 @@ def agent() -> AssessmentAgent:
 
 class StartRequest(BaseModel):
     student_name: str = Field(min_length=1, max_length=80)
-    topic: str = Field(min_length=2, max_length=120)
+    topic: str = Field(default="", max_length=120)  # not needed when a seed question is given
     grade: str = Field(min_length=1, max_length=20)
     num_questions: int = Field(default=10, ge=3, le=25)
     time_limit_minutes: int | None = Field(default=None, ge=1, le=180)  # None = no session limit
@@ -56,14 +56,25 @@ class StartRequest(BaseModel):
     # Per-question timing: AI-chosen, a fixed number of seconds, or untimed practice.
     timer_mode: Literal["auto", "fixed", "off"] = "auto"
     seconds_per_question: int | None = Field(default=None, ge=30, le=600)
+    # A confirmed analysis from POST /api/questions/analyze: build the session around that question.
+    seed: dict | None = None
 
     @model_validator(mode="after")
     def _check_timer(self):
+        if self.seed is None and len(self.topic.strip()) < 2:
+            raise ValueError("choose a topic (or provide a seed question)")
         if self.timer_mode == "fixed" and self.seconds_per_question is None:
             raise ValueError("timer_mode 'fixed' needs seconds_per_question (30-600)")
         if self.timer_mode == "off" and self.time_limit_minutes is not None:
             raise ValueError("an untimed session (timer_mode 'off') can't have a session time limit")
         return self
+
+
+class AnalyzeRequest(BaseModel):
+    grade: str = Field(min_length=1, max_length=20)
+    question_text: str = Field(default="", max_length=5000)
+    # Optional upload: {name, media_type, data: base64}. Images/PDF are read by the model.
+    attachment: dict | None = None
 
 
 class AnswerRequest(BaseModel):
@@ -92,8 +103,14 @@ def list_topics(grade: str | None = None) -> dict:
 async def start_test(req: StartRequest) -> dict:
     sid = await agent().start(req.student_name.strip(), " ".join(req.topic.split()), req.grade.strip(),
                               req.num_questions, req.time_limit_minutes, req.reattempts,
-                              req.timer_mode, req.seconds_per_question)
+                              req.timer_mode, req.seconds_per_question, req.seed)
     return {"test_id": sid}
+
+
+@app.post("/api/questions/analyze")
+async def analyze_question(req: AnalyzeRequest) -> dict:
+    """Read a typed or uploaded question: transcription, concepts, structure, difficulty."""
+    return await agent().analyze_question(req.grade.strip(), req.question_text, req.attachment)
 
 
 @app.post("/api/tests/{test_id}/next")

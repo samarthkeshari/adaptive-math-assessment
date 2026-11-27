@@ -22,19 +22,23 @@ class LLMProvider(ABC):
 
     @abstractmethod
     async def _complete_json(self, system: str, prompt: str, schema: dict, *,
-                             effort: str, max_tokens: int) -> str:
-        """Return the raw text of a response that should contain one JSON object."""
+                             effort: str, max_tokens: int, attachments: list[dict] | None = None) -> str:
+        """Return the raw text of a response that should contain one JSON object.
+        attachments: [{"media_type": "image/png" | ... | "application/pdf", "data": <base64>}]."""
 
     async def generate_json(self, system: str, prompt: str, schema: dict, *,
-                            effort: str = "medium", max_tokens: int = 32000) -> dict:
-        """effort: 'low' | 'medium' | 'high'. Providers without an effort control ignore it."""
+                            effort: str = "medium", max_tokens: int = 32000,
+                            attachments: list[dict] | None = None) -> dict:
+        """effort: 'low' | 'medium' | 'high'. Providers without an effort control ignore it.
+        attachments: images/PDFs the model should read along with the prompt."""
         last_error = ""
         for attempt in range(2):
             p = prompt if attempt == 0 else (
                 f"{prompt}\n\nYour previous reply was rejected: {last_error}\n"
                 "Reply again with ONLY a JSON object that matches the schema exactly."
             )
-            text = await self._complete_json(system, p, schema, effort=effort, max_tokens=max_tokens)
+            text = await self._complete_json(system, p, schema, effort=effort, max_tokens=max_tokens,
+                                             attachments=attachments)
             try:
                 data = extract_json(text)
                 errors = validate(data, schema)

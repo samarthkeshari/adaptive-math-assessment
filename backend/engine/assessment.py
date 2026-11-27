@@ -179,7 +179,12 @@ async def write_narrative(llm: LLMProvider, session: dict, cmap: dict, assessmen
         + (f" | likely root cause: {', '.join(c['likely_root_causes'])}" if c.get("likely_root_causes") else "")
         for c in assessment["concepts"]
     )
-    prompt = f"""Student: {session['student_name']} | Grade {session['grade']} | Topic: {session['topic']}
+    seed_note = ""
+    if session.get("seed"):
+        seed_note = ("\nThis session was built from the user's own question (problems mirrored its "
+                     f"structure):\n{session['seed']['question_text']}\nRelate the findings to "
+                     "how the student handles problems like it.\n")
+    prompt = f"""Student: {session['student_name']} | Grade {session['grade']} | Topic: {session['topic']}{seed_note}
 Overall ability estimate: {assessment['overall_theta']}/10 ({assessment['estimated_level']})
 Difficulty path: {' -> '.join(map(str, assessment['difficulty_path']))}
 Accuracy by problem dimension: {assessment['accuracy_by_dimension']}

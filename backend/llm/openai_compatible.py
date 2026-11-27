@@ -22,7 +22,17 @@ class OpenAICompatibleProvider(LLMProvider):
         # Local servers (Ollama, vLLM) ignore the key but the SDK requires a non-empty one.
         self.client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key or "not-needed")
 
-    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens):
+    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens, attachments=None):
+        user_content = prompt
+        if attachments:
+            if any(a["media_type"] == "application/pdf" for a in attachments):
+                raise LLMError(f"{self.name} can't read PDF uploads here. Use Claude, upload an image "
+                               "of the question, or paste its text.")
+            # Vision-capable models take images as data URIs.
+            user_content = [{"type": "text", "text": prompt}] + [
+                {"type": "image_url", "image_url": {"url": f"data:{a['media_type']};base64,{a['data']}"}}
+                for a in attachments
+            ]
         if self.json_mode == "schema":
             response_format = {
                 "type": "json_schema",
@@ -38,7 +48,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_text},
-                    {"role": "user", "content": prompt},
+                    {"role": "user", "content": user_content},
                 ],
                 response_format=response_format,
                 **{self.token_param: min(max_tokens, 16000)},

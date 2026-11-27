@@ -10,7 +10,7 @@ const PERSPECTIVE_LABELS = {
 const DIMENSION_LABELS = { direct_concept: "Single concept", multi_concept: "Multi-concept" };
 const TYPE_LABELS = { word: "Word problems", direct: "Direct problems" };
 const MODE_LABELS = {
-  explore: "Explore", probe: "Probe gap", root_cause: "Root cause", confirm: "Confirm", stretch: "Stretch",
+  mirror: "Like your question", explore: "Explore", probe: "Probe gap", root_cause: "Root cause", confirm: "Confirm", stretch: "Stretch",
 };
 const MASTERY = {
   secure: ["good", "Secure"], developing: ["warn", "Developing"], gap: ["bad", "Gap"],
@@ -187,7 +187,8 @@ async function openStudent(name) {
         el("div", { class: "small muted" },
           `Grade ${t.grade} · started ${fmtDate(t.started_at)} · last active ${fmtDate(t.last_activity)}`
           + (t.time_limit_minutes ? ` · ${fmtTime(t.session_time_left)} of ${t.time_limit_minutes} min left` : "")
-          + (t.timer_mode === "off" ? " · untimed" : t.timer_mode === "fixed" ? ` · ${fmtTime(t.seconds_per_question)} per question` : "")),
+          + (t.timer_mode === "off" ? " · untimed" : t.timer_mode === "fixed" ? ` · ${fmtTime(t.seconds_per_question)} per question` : "")
+          + (t.from_question ? " · from your question" : "")),
         el("div", { class: "mini-progress" }, el("div", { style: `width:${(100 * t.answered) / t.num_questions}%` }))),
       el("span", { class: "actions" },
         el("span", { class: "small muted" }, `${t.answered}/${t.num_questions} answered`),
@@ -205,7 +206,8 @@ async function openStudent(name) {
         el("div", {},
           el("div", { class: "h-topic" }, t.topic),
           el("div", { class: "small muted" }, `Grade ${t.grade} · ${fmtDate(t.finished_at)} · ability ${t.overall_theta}/10`
-            + (t.time_limit_minutes ? ` · ${t.time_limit_minutes}-min session` : ""))),
+            + (t.time_limit_minutes ? ` · ${t.time_limit_minutes}-min session` : "")
+            + (t.from_question ? " · from your question" : ""))),
         el("span", { class: "actions" },
           el("span", { class: `badge ${pct >= 80 ? "good" : pct >= 50 ? "warn" : "bad"}` }, `${t.score}/${t.answered}`),
           deleteButton(t)));
@@ -294,11 +296,106 @@ function updateSessionPlan() {
     + (r ? ` After a wrong answer the student can try again ${r === 1 ? "once" : `${r} times`} (with a hint) before the answer is shown.` : "");
 }
 
+// ---------------------------------------------------------------- sessions from the user's own question
+const sourceMode = () => document.querySelector('input[name="source"]:checked').value;
+
+function onSourceChange() {
+  const seedMode = sourceMode() === "seed";
+  $("topic-fields").classList.toggle("hidden", seedMode);
+  $("seed-fields").classList.toggle("hidden", !seedMode);
+  // Hidden required fields would silently block submitting, so only the visible mode's count.
+  $("topic-select").required = !seedMode;
+  if (seedMode) $("new-topic").required = false;
+  else onTopicChange();
+}
+
+function invalidateSeed(reason) {
+  if (!state.seed) return;
+  state.seed = null;
+  const box = $("seed-preview");
+  box.replaceChildren(el("p", { class: "small warn-text" }, `${reason} Read the question again before starting.`));
+  box.classList.remove("hidden");
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+    reader.onerror = () => reject(new Error("Couldn't read the file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function readSeedQuestion() {
+  const text = $("seed-text").value.trim();
+  const file = $("seed-file").files[0];
+  if (!text && !file) { showError("Type a question or choose a file."); return; }
+  if (file && file.size > 10 * 1024 * 1024) { showError("The file is larger than 10 MB."); return; }
+  const btn = $("seed-read-btn");
+  btn.disabled = true;
+  btn.textContent = "Reading your question…";
+  try {
+    let attachment = null;
+    if (file) {
+      const type = file.type || (file.name.toLowerCase().endsWith(".txt") ? "text/plain" : "");
+      attachment = { name: file.name, media_type: type, data: await fileToBase64(file) };
+    }
+    state.seed = await api("/api/questions/analyze", {
+      method: "POST", body: { grade: $("grade").value, question_text: text, attachment },
+    });
+    renderSeedPreview(state.seed);
+  } catch (e) {
+    state.seed = null;
+    showError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Read my question";
+  }
+}
+
+function renderSeedPreview(a) {
+  const st = a.structure;
+  const grade = $("grade").value;
+  const parts = [
+    st.problem_type === "word" ? "Word problem" : "Direct problem",
+    st.answer_format === "multiple_choice" ? "multiple choice" : "short answer",
+    `about ${st.steps} step${st.steps === 1 ? "" : "s"}`,
+    st.representation && st.representation !== "none" ? st.representation : null,
+    st.context && st.context !== "none" ? `context: ${st.context}` : null,
+  ].filter(Boolean);
+  const gradeMismatch = a.suggested_grade && a.suggested_grade.toLowerCase() !== grade.toLowerCase();
+  $("seed-preview").replaceChildren(...[
+    el("div", { class: "small muted" }, "We read your question as:"),
+    el("blockquote", { class: "seed-quote" }, a.question_text),
+    el("p", {}, el("strong", {}, "Topic: "), a.topic),
+    el("p", {}, el("strong", {}, "Concepts: "), ...a.concepts.map((c) =>
+      el("span", { class: `badge ${c.in_question ? "neutral" : "plain"}`, title: c.description },
+        `${c.in_question ? "★ " : ""}${c.name}`))),
+    el("p", { class: "small muted" }, "★ used in your question; the others are foundations it builds on."),
+    el("p", {}, el("strong", {}, "Structure: "), parts.join(" · ")),
+    el("p", {}, el("strong", {}, "Difficulty: "), levelText(a.difficulty)),
+    gradeMismatch ? el("p", { class: "small warn-text" },
+      `This looks like a grade ${a.suggested_grade} question; you chose grade ${grade}. `,
+      el("button", { type: "button", class: "btn small-btn", onclick: () => {
+        $("grade").value = a.suggested_grade.toUpperCase() === "K" ? "K" : a.suggested_grade;
+        loadTopics();
+        invalidateSeed("Grade changed.");
+      } }, `Use grade ${a.suggested_grade}`)) : null,
+    el("p", { class: "small muted" }, "If anything is misread, edit the question text above and read it again."),
+  ].filter(Boolean));  // replaceChildren would render a null as the text "null"
+  $("seed-preview").classList.remove("hidden");
+}
+
 async function startSession(evt) {
   evt.preventDefault();
+  const seedMode = sourceMode() === "seed";
   const picked = $("topic-select").value;
-  const topic = (picked === NEW_TOPIC ? $("new-topic").value : picked).trim();
-  if (!topic) {
+  const topic = seedMode ? "" : (picked === NEW_TOPIC ? $("new-topic").value : picked).trim();
+  if (seedMode && !state.seed) {
+    showError("Read your question first (Read my question), then start.");
+    return;
+  }
+  if (!seedMode && !topic) {
     showError("Choose a topic or type a new one.");
     return;
   }
@@ -306,6 +403,7 @@ async function startSession(evt) {
     student_name: state.student,
     grade: $("grade").value,
     topic,
+    seed: seedMode ? state.seed : null,
     num_questions: parseInt($("num-questions").value, 10) || 10,
     time_limit_minutes: sessionMinutes(),
     reattempts: parseInt($("reattempts").value, 10) || 0,
@@ -313,7 +411,7 @@ async function startSession(evt) {
     seconds_per_question: $("timer-mode").value === "fixed" ? parseInt($("seconds-per-question").value, 10) : null,
   };
   if (body.timer_mode === "off") body.time_limit_minutes = null;
-  loading("Mapping the fundamental concepts of this topic…");
+  loading(seedMode ? "Setting up problems like yours…" : "Mapping the fundamental concepts of this topic…");
   try {
     const { test_id } = await api("/api/tests", { method: "POST", body });
     await resumeTest(test_id);
@@ -636,6 +734,12 @@ function renderReport(d) {
   $("r-title").textContent = `${d.topic}: Grade ${d.grade}`;
   $("r-delete").onclick = () => deleteSession({ id: d.test_id, topic: d.topic, grade: d.grade, started_at: d.started_at });
   $("r-sub").textContent = `${d.student_name} · ${fmtDate(d.started_at)} · ${d.llm.provider} / ${d.llm.model}`;
+  $("r-seed").replaceChildren(...(d.seed ? [el("div", { class: "seed-card" },
+    el("strong", {}, "Based on your question"),
+    el("blockquote", { class: "seed-quote" }, d.seed.question_text),
+    el("details", {}, el("summary", { class: "small" }, "Its answer"),
+      el("p", {}, el("strong", {}, "Answer: "), d.seed.answer),
+      el("ol", { class: "steps" }, d.seed.solution_steps.map((x) => el("li", {}, x)))))] : []));
 
   const correct = d.questions.filter((q) => q.is_correct).length;
   $("r-stats").replaceChildren(
@@ -795,7 +899,8 @@ function renderReview() {
           el("div", {},
             el("h3", { class: "mt0" }, `${s.topic} · grade ${s.grade}`),
             el("div", { class: "small muted" }, `${fmtDate(s.started_at)} · ${correct}/${s.questions.length} correct`
-              + (s.status === "in_progress" ? ` · unfinished (${s.questions.length}/${s.num_questions} answered)` : ""))),
+              + (s.status === "in_progress" ? ` · unfinished (${s.questions.length}/${s.num_questions} answered)` : "")),
+            s.seed_question ? el("div", { class: "small muted seed-line" }, `Built from your question: ${s.seed_question}`) : null),
           s.status === "completed"
             ? el("button", { class: "btn small-btn", type: "button", onclick: () => openReport(s.test_id) }, "Session report")
             : el("button", { class: "btn small-btn primary", type: "button", onclick: () => resumeTest(s.test_id) }, "Continue")),
@@ -1022,6 +1127,11 @@ $("student-form").addEventListener("submit", (e) => {
   if (name) openStudent(name);
 });
 $("new-session-form").addEventListener("submit", startSession);
+document.querySelectorAll('input[name="source"]').forEach((r) => r.addEventListener("change", onSourceChange));
+$("seed-read-btn").addEventListener("click", readSeedQuestion);
+$("seed-text").addEventListener("input", () => invalidateSeed("The question text changed."));
+$("seed-file").addEventListener("change", () => invalidateSeed("A different file was chosen."));
+$("grade").addEventListener("change", () => invalidateSeed("Grade changed."));
 $("grade").addEventListener("change", loadTopics);
 $("all-grades").addEventListener("change", loadTopics);
 $("topic-select").addEventListener("change", onTopicChange);

@@ -67,13 +67,20 @@ class AnthropicProvider(LLMProvider):
             raise LLMError(f"ANTHROPIC_API_KEY_HELPER failed (exit {out.returncode}).")
         return key
 
-    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens):
+    async def _complete_json(self, system, prompt, schema, *, effort, max_tokens, attachments=None):
         client = await self._get_client()
+        content = prompt
+        if attachments:  # images and PDFs go before the text, as content blocks
+            content = [
+                {"type": "document" if a["media_type"] == "application/pdf" else "image",
+                 "source": {"type": "base64", "media_type": a["media_type"], "data": a["data"]}}
+                for a in attachments
+            ] + [{"type": "text", "text": prompt}]
         kwargs = dict(
             model=self.model,
             max_tokens=max_tokens,
             system=system,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": content}],
             output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
         )
         try:
