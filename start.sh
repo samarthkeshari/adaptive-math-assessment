@@ -6,8 +6,12 @@
 #   ./start.sh gateway    Claude via a company AI gateway with a token helper
 #
 # Settings come from the environment and/or a .env file next to this script (template in
-# README). Variables already exported in your shell take precedence over .env.
+# README). Non-empty variables already exported in your shell take precedence over .env.
+# ENV_FILE=other.env ./start.sh   reads a different settings file.
 #   PORT=9000 ./start.sh direct     custom port
+#
+# Python dependencies live in a virtual environment (.venv) managed by ./setup.sh,
+# which this script runs first.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -16,16 +20,43 @@ case "$MODE" in auto|direct|gateway) ;; *)
   echo "Usage: ./start.sh [direct|gateway]" >&2; exit 2 ;;
 esac
 
-# ---- load .env (simple KEY=VALUE lines; shell environment wins)
-if [ -f .env ]; then
+# ---- load .env: KEY=value lines. Shell variables win unless they are empty.
+# Reports which setting NAMES were loaded (never values) so problems are easy to spot.
+ENV_FILE="${ENV_FILE:-.env}"
+ENV_LOADED=""
+if [ -f "$ENV_FILE" ]; then
+  kept=""; bad=""; n=0
   while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"                                    # Windows line endings
+    [ "$n" -eq 1 ] && line="${line#$'\xef\xbb\xbf'}"        # UTF-8 byte-order mark
     [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
-    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    if ! [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      bad="$bad $n"; continue
+    fi
     key="${BASH_REMATCH[2]}"; value="${BASH_REMATCH[3]}"
-    value="${value%"${value##*[![:space:]]}"}"                    # trim trailing spaces
-    if [[ "$value" =~ ^\"(.*)\"$ || "$value" =~ ^\'(.*)\'$ ]]; then value="${BASH_REMATCH[1]}"; fi
-    [ -z "${!key+x}" ] && export "$key=$value"
-  done < .env
+    if [[ "$value" =~ ^\"(.*)\"[[:space:]]*(#.*)?$ || "$value" =~ ^\'(.*)\'[[:space:]]*(#.*)?$ ]]; then
+      value="${BASH_REMATCH[1]}"                            # quoted value (may contain #)
+    else
+      value="${value%%[[:space:]]#*}"                       # drop "  # trailing comment"
+      value="${value%"${value##*[![:space:]]}"}"            # trim trailing spaces
+    fi
+    if [ -n "${!key:-}" ]; then
+      kept="$kept $key"                                     # already set (non-empty) in your shell
+    else
+      export "$key=$value"
+      [ -n "$value" ] && ENV_LOADED="$ENV_LOADED $key"
+    fi
+  done < "$ENV_FILE"
+  echo "Loaded from $ENV_FILE:${ENV_LOADED:- (no settings)}"
+  [ -n "$kept" ] && echo "Using your shell's values instead of $ENV_FILE for:$kept"
+  [ -n "$bad" ] && echo "Warning: couldn't read line(s)$bad of $ENV_FILE (expected KEY=value)" >&2
+else
+  echo "No $ENV_FILE file in $(pwd)."
+  if [[ "$ENV_FILE" != */* ]]; then                         # e.g. saved as ".env.txt" or "env"
+    others="$(ls -a | grep -iE '^\.?env' | grep -vxF "$ENV_FILE" | tr '\n' ' ' || true)"
+    [ -n "$others" ] && echo "  Found instead: $others(it must be named exactly $ENV_FILE)"
+  fi
 fi
 
 # ---- pick the Claude connection
@@ -48,8 +79,11 @@ if [ "${LLM_PROVIDER:-anthropic}" = "anthropic" ]; then
     # Direct: make sure nothing routes the API key to a gateway by accident.
     unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY_HELPER
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
-      echo "Direct mode needs ANTHROPIC_API_KEY (in .env or exported)." >&2
-      echo "Get a key at https://console.anthropic.com/ or use: ./start.sh gateway" >&2
+      echo "Direct mode needs ANTHROPIC_API_KEY (in $ENV_FILE or exported)." >&2
+      similar="$(printf '%s\n' $ENV_LOADED | grep -iE 'anthropic|claude|api_?key' | grep -vx ANTHROPIC_API_KEY | tr '\n' ' ' || true)"
+      [ -n "$similar" ] && echo "  $ENV_FILE has: $similar- the name must be exactly ANTHROPIC_API_KEY" >&2
+      echo "  Expected a line like:  ANTHROPIC_API_KEY=sk-ant-..." >&2
+      echo "  Get a key at https://console.anthropic.com/ or use: ./start.sh gateway" >&2
       exit 1
     fi
     echo "Claude connection: direct Anthropic API"
@@ -58,21 +92,11 @@ else
   echo "LLM provider: ${LLM_PROVIDER} (${LLM_MODEL:-model not set})"
 fi
 
-# ---- environment
-PYTHON="${PYTHON:-python3}"
-if ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
-  echo "Python 3.10+ is required (found: $("$PYTHON" --version 2>&1))." >&2
-  exit 1
-fi
-if [ ! -d .venv ]; then
-  echo "Creating virtual environment in .venv ..."
-  "$PYTHON" -m venv .venv
-fi
+# ---- virtual environment: create/update .venv (see setup.sh), then run inside it
+./setup.sh
+VENV_DIR="${VENV_DIR:-.venv}"
 # shellcheck disable=SC1091
-source .venv/bin/activate
-echo "Installing dependencies ..."
-pip install -q --upgrade pip
-pip install -q -r backend/requirements.txt
+source "$VENV_DIR/bin/activate"
 
 PORT="${PORT:-8000}"
 echo "Student data is saved in ${DATA_DIR:-$(pwd)/data}/students/<student-name>/"

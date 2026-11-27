@@ -44,10 +44,28 @@ Requirements: Python 3.10+, and access to Claude in **one or both** of these way
 | Credential | `ANTHROPIC_API_KEY` (from console.anthropic.com) | a token helper command that prints a short-lived token |
 | Start with | `./start.sh direct` | `./start.sh gateway` |
 
-`./start.sh` creates `.venv`, installs the requirements, checks the connection settings, and
-starts the server. Then open **http://127.0.0.1:8000** (Ctrl+C to stop). The footer of the
+`./start.sh` sets up the virtual environment (via `./setup.sh`), checks the connection
+settings, and starts the server. Then open **http://127.0.0.1:8000** (Ctrl+C to stop). The footer of the
 home page shows which connection is active, e.g. *via direct API* or
 *via gateway (ai-gateway…)*.
+
+### Virtual environment
+
+The app runs in a Python virtual environment, `.venv` in the project root (git-ignored).
+`./setup.sh` manages it, and `./start.sh` runs it automatically before every start:
+
+- **First run:** creates `.venv` with your `python3` (3.10+ required) and installs
+  `backend/requirements.txt` (FastAPI, Uvicorn, the Anthropic and OpenAI SDKs).
+- **Later runs:** reinstalls only if `backend/requirements.txt` changed (it keeps a
+  fingerprint in `.venv/.requirements.sha256`), so starting is quick.
+- **Old Python:** a `.venv` made with Python older than 3.10 is rebuilt automatically.
+
+```bash
+./setup.sh                       # set up ahead of time (optional; start.sh does it too)
+./setup.sh --force               # reinstall all dependencies
+PYTHON=python3.12 ./setup.sh     # create the venv with a specific Python
+rm -rf .venv                     # remove it; the next start recreates it
+```
 
 ### Option A: direct Anthropic API
 
@@ -137,14 +155,16 @@ The footer of the home page shows the active connection (*via direct API* or
 - `DATA_DIR=/path ./start.sh` stores student data elsewhere.
 - `LLM_MODEL=claude-sonnet-5-5 ./start.sh …` picks a different Claude model. On a gateway,
   use a model ID the gateway exposes.
-- Manual start, without the script:
+- Manual start, without `start.sh` (from the project root):
 
   ```bash
-  python3 -m venv .venv && source .venv/bin/activate
-  pip install -r backend/requirements.txt
+  ./setup.sh                               # or: python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt
+  source .venv/bin/activate                # activate the virtual environment
   export ANTHROPIC_API_KEY=sk-ant-...      # or ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY_HELPER
-  uvicorn backend.main:app --port 8000     # from the project root; one worker (memory is in-process)
+  uvicorn backend.main:app --port 8000     # one worker (memory is in-process)
+  deactivate                               # when done
   ```
+- Run the tests inside the venv: `.venv/bin/python -m backend.tests.test_offline`.
 
 Offline tests (stub LLM, no key needed), from the project root: `python3 -m backend.tests.test_offline`
 
@@ -355,7 +375,8 @@ backend/                      Python package: run with `uvicorn backend.main:app
 frontend/                     student-facing UI: index.html, app.js, styles.css
 data/                         student data (JSONL; created on first run; git-ignored)
 docs/                         SPECIFICATION.md, DESIGN.md
-start.sh                      one-command local start (direct API or gateway)
+setup.sh                      create/update the virtual environment (.venv)
+start.sh                      one-command local start (runs setup.sh; direct API or gateway)
 ```
 
 The frontend talks to the backend only through the JSON API under `/api/` (table above). To
